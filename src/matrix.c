@@ -241,56 +241,6 @@ Matrix* matrix_mul(const Matrix* a, const Matrix* b) {
     return NULL;
   }
 
-  /*
-   * 3x2 * 2x3 = 3x3
-   *
-   * A       x B            = C
-   * |1 | 2|   |-1 | 0 | 1|   |(1*-1 + 2*2) | (1*0 + 2*1) | (1*1 + 2*0)|
-   * |1 | 0| x | 2 | 1 | 0| = |(1*-1 + 0*2) | (1*0 + 1*1) | (1*1 + 0*0)|
-   * |0 | 1|                  |(0*-1 + 1*2) | (0*0 + 1*1) | (0*1 + 1*0)|
-   *
-   * C =  3 2 1
-   *     -1 1 1
-   *      2 1 0
-   *
-   * Estamos raciocinando em cima do matrix_get(M, indice_elemento_no_vetor, indice_do_vetor_coluna)
-   *
-   * C(indice_elemento_no_vetor, indice_do_vetor_coluna)
-   *
-   * Primeiro elemento de cada vetor coluna do resultado C:
-   * 
-   * C(a->nlins, b->ncols) = A(a->nlins, a->ncols) * B(b->ncols, a->nlins) + A(a->nlins, a->ncols) * B(b->nlins, b->ncols)
-   *
-   * C(0, 0) = A(0, 0) * B(0, 0) + A(0, 1) * B(1, 0) = 1*-1 + 2*2
-   * C(0, 1) = A(0, 0) * B(0, 1) + A(0, 1) * B(1, 1) = 1*0 + 2*1
-   * C(0, 2) = A(0, 0) * B(0, 2) + A(0, 1) * B(1, 2) = 1*1 + 2*0
-   *
-   * Segundo elemento de cada vetor coluna do resultado C:
-   * C(1, 0) = A(1, 0) * B(0, 0) + A(1, 1) * B(1, 0)
-   * C(1, 1) = A(1, 0) * B(0, 1) + A(1, 1) * B(1, 1)
-   * C(1, 2) = A(1, 0) * B(0, 2) + A(1, 1) * B(1, 2)
-   *
-   * Terceiro elemento de cada vetor coluna do resultado C:
-   * C(2, 0) = A(2, 0) * B(0, 0) + A(2, 1) * B(1, 0)
-   * C(2, 1) = A(2, 0) * B(0, 1) + A(2, 1) * B(1, 1)
-   * C(2, 2) = A(2, 0) * B(0, 2) + A(2, 1) * B(1, 2)
-   *
-   * i = quantidade de linhas da matriz A
-   * j = quantidade de colunas da matriz B
-   * n = quantidade de linhas da matriz B
-   *
-   * C(i,j) = Soma(k=1..n)[ aik * bkj ]
-   *
-   * Para i = 0..a->nlins faça
-   *  Para j = 0..b->ncols faça
-   *    cij = 0
-   *    Para k = 1..b->nlins
-   *      cij += aik * bkj
-   *    Fim
-   *    cij = matrix_set(c, i, j, cij)
-   *  fim
-   * fim
-   */
   for (unsigned int i = 0; i < a->nlins; i++) {
     for (unsigned int j = 0; j < b->ncols; j++) {
       double cij = 0.0;
