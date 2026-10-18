@@ -7,9 +7,9 @@
 #define EMATRIXALLOCATION       2000
 #define EMATRIXINVALIDADDDIM    2001
 #define EMATRIXINVALIDLINEINDEX 2002
-#define EMATRIXINVALIDCOLINDEX  2003; 
-#define EMATRIXINVALIDMUL       2004;
-#define EMATRIXNULL             2999;
+#define EMATRIXINVALIDCOLINDEX  2003
+#define EMATRIXINVALIDMUL       2004
+#define EMATRIXNULL             2999
 
 typedef struct matrix_rn_t {
   Vector* columns;    // vetores colunas que compoem a matriz

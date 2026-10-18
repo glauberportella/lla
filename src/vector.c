@@ -42,6 +42,13 @@ Vector* vector_create(unsigned int dim, double coords[]) {
   }
 
   v->dim = dim;
+  v->x = (double*)malloc(dim * sizeof(double));
+  if (v->x == NULL) {
+    errno = EVECTORALLOCATION;
+    free(v);
+    return NULL;
+  }
+
   memcpy(v->x, coords, dim * sizeof(double));
 
   return v;

@@ -71,7 +71,7 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
   for (unsigned int i = 0; i < ncols; i++) {
     if (columns[i].dim != m->nlins || columns[i].x == NULL) {
       for (unsigned int j = 0; j < i; j++) {
-        free(m->columns[i].x);
+        free(m->columns[j].x);
       }
       free(m->columns);
       free(m);
@@ -82,6 +82,9 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
     m->columns[i].dim = columns[i].dim;
     m->columns[i].x = (double*)malloc(m->columns[i].dim * sizeof(double));
     if (m->columns[i].x == NULL) {
+      for (unsigned int j = 0; j < i; j++) {
+        free(m->columns[j].x);
+      }
       free(m->columns);
       free(m);
       errno = EMATRIXALLOCATION;
@@ -114,12 +117,12 @@ int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned 
     return -2;
   }
 
-  if (i > m->nlins) {
+  if (i >= m->nlins) {
     errno = EMATRIXINVALIDLINEINDEX;
     return -1;
   }
 
-  if (j > m->ncols) {
+  if (j >= m->ncols) {
     errno = EMATRIXINVALIDCOLINDEX;
     return 1;
   }
