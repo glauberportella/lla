@@ -1,4 +1,4 @@
-# algebralinear
+# LLA - Little Linear Algebra
 
 Biblioteca pequena em C para operações de álgebra linear com vetores e matrizes de números reais (`double`).
 
