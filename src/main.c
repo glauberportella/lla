@@ -156,6 +156,11 @@ void test_matrix_mul() {
   assert(ab != NULL);
   matrix_println(ab, "AxB");
 
+  Matrix* ba = matrix_mul(b, a);
+  assert(ba != NULL);
+  matrix_println(ba, "BxA");
+
+  matrix_destroy(ba);
   matrix_destroy(ab);
   matrix_destroy(b);
   matrix_destroy(a);

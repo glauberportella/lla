@@ -13,7 +13,7 @@ Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
     return NULL;
   }
 
-  Matrix* m = malloc(sizeof(Matrix));
+  Matrix* m = (Matrix*)malloc(sizeof(Matrix));
   if (m == NULL) {
     errno = EMATRIXALLOCATION;
     return NULL;
@@ -21,7 +21,7 @@ Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
 
   m->nlins = nlins;
   m->ncols = ncols;
-  m->columns = calloc(ncols, sizeof(Vector));
+  m->columns = (Vector*)calloc(ncols, sizeof(Vector));
 
   if (m->columns == NULL) {
     free(m);
@@ -31,13 +31,12 @@ Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
 
   for (unsigned int j = 0; j < ncols; j++) {
     m->columns[j].dim = nlins;
-    m->columns[j].x = calloc(nlins, sizeof(double));
+    m->columns[j].x = (double*)calloc(nlins, sizeof(double));
 
     if (m->columns[j].x == NULL) {
       for (unsigned int k = 0; k < j; k++) {
         free(m->columns[k].x);
       }
-
       free(m->columns);
       free(m);
       errno = EMATRIXALLOCATION;
@@ -216,7 +215,6 @@ Matrix* matrix_sub(const Matrix* a, const Matrix* b) {
     for (unsigned int j = 0; j < a->ncols; j++) {
       double aij = matrix_get(a, i, j);
       double bij = matrix_get(b, i, j);
-      double cij = aij - bij;
       matrix_set(c, i, j, aij - bij);
     }
   }

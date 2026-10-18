@@ -1,5 +1,6 @@
 #include "vector.h"
 #include <stdio.h>
+#include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -11,7 +12,7 @@ Vector* vector_create_empty(unsigned int dim) {
     return NULL;
   }
   
-  Vector* v = malloc(sizeof(Vector));
+  Vector* v = (Vector*)malloc(sizeof(Vector));
   if (v == NULL) {
     errno = EVECTORALLOCATION;
     return NULL;
@@ -34,14 +35,14 @@ Vector* vector_create(unsigned int dim, double coords[]) {
     return NULL;
   }
 
-  Vector* v = malloc(sizeof(Vector));
+  Vector* v = (Vector*)malloc(sizeof(Vector));
   if (v == NULL) {
     errno = EVECTORALLOCATION;
     return NULL;
   }
 
   v->dim = dim;
-  v->x = coords;
+  memcpy(v->x, coords, dim * sizeof(double));
 
   return v;
 }
@@ -73,14 +74,14 @@ Vector* vector_add(const Vector* a, const Vector* b) {
   }
 
   v->dim = a->dim;
-  v->x = (double*)malloc(a->dim * sizeof(double));
+  v->x = (double*)calloc(a->dim, sizeof(double));
   if (v->x == NULL) {
     errno = EVECTORALLOCATION;
     free(v);
     return NULL;
   }
 
-  for (int i = 0; i < a->dim; i++) {
+  for (unsigned int i = 0; i < a->dim; i++) {
     v->x[i] = a->x[i] + b->x[i];
   }
   
@@ -105,14 +106,14 @@ Vector* vector_sub(const Vector* a, const Vector* b) {
   }
   
   v->dim = a->dim;
-  v->x = (double*)malloc(a->dim * sizeof(double));
+  v->x = (double*)calloc(a->dim, sizeof(double));
   if (v->x == NULL) {
     errno = EVECTORALLOCATION;
     free(v);
     return NULL;
   }
 
-  for (int i = 0; i < a->dim; i++) {
+  for (unsigned int i = 0; i < a->dim; i++) {
     v->x[i] = a->x[i] - b->x[i];
   }
   
@@ -132,14 +133,14 @@ Vector* vector_mul(double scalar, const Vector* a) {
   }
 
   v->dim = a->dim;
-  v->x = (double*)malloc(a->dim * sizeof(double));
+  v->x = (double*)calloc(a->dim, sizeof(double));
   if (v->x == NULL) {
     errno = EVECTORALLOCATION;
     free(v);
     return NULL;
   }
 
-  for (int i = 0; i < a->dim; i++) {
+  for (unsigned int i = 0; i < a->dim; i++) {
     v->x[i] = scalar * a->x[i];
   }
   
@@ -154,7 +155,7 @@ void vector_print(const Vector* v) {
   }
   
   printf("(");
-  for (int i = 0; i < v->dim; i++) {
+  for (unsigned int i = 0; i < v->dim; i++) {
     if (i + 1 < v->dim) {
       printf("%.2f, ", v->x[i]);
     } else {
