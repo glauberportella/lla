@@ -12,6 +12,7 @@ O objetivo é manter o código simples, sem dependências externas além da bibl
 └── src
     ├── vector.h / vector.c   # tipo Vector e operações sobre vetores
     ├── matrix.h / matrix.c   # tipo Matrix e operações sobre matrizes
+    ├── lu.h / lu.c           # decomposição LU com pivoteamento parcial
     └── main.c                # testes
 ```
 
@@ -81,6 +82,43 @@ typedef struct matrix_rn_t {
 
 Toda função que retorna um novo `Vector*` ou `Matrix*` aloca memória, que deve ser liberada pelo chamador com `vector_destroy` ou `matrix_destroy`.
 
+### Decomposição LU (`lu.h`)
+
+| Função | Descrição |
+| --- | --- |
+| `lu_create_decomposition(a)` | Retorna a decomposição LU de `a` (matriz quadrada) ou `NULL` com `errno` |
+| `lu_destroy(lu)` | Libera a memória da decomposição |
+
+O resultado é um `LU` com três matrizes:
+
+```c
+typedef struct LU_t {
+  Matrix* l; // triangular inferior, diagonal unitária
+  Matrix* u; // triangular superior
+  Matrix* p; // permutação
+} LU;
+```
+
+A decomposição usa **pivoteamento parcial**, então a relação válida é
+
+```
+P * A = L * U      (equivalentemente, A = Pᵀ * L * U)
+```
+
+Como o pivoteamento reordena as linhas de `A`, `L * U` sozinho **não** devolve
+`A`: é preciso aplicar a permutação. Exemplo para
+
+```
+A = | 2 1 1 |      L = | 1    0     0   |     U = | 8  7    3   |
+    | 4 3 1 |          | 0.25 1     0   |         | 0 -0.75 0.25|
+    | 8 7 3 |          | 0.50 0.67  1   |         | 0  0   -0.67|
+```
+
+tem-se `P = | 0 0 1 |`, `P * A = L * U` e `A = Pᵀ * L * U`.
+
+Matrizes singulares (sem solução única) retornam `NULL` com `errno =
+EMATRIXSINGULAR`.
+
 ## Exemplo
 
 ```c
@@ -126,12 +164,14 @@ Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get
 | `EMATRIXINVALIDCOLINDEX` | 2003 | Índice de coluna fora dos limites |
 | `EMATRIXINVALIDMUL` | 2004 | Dimensões incompatíveis para multiplicação |
 | `EMATRIXNULL` | 2999 | Matriz nula passada como argumento |
+| `EMATRIXINVALIDDIM` | 2005 | Matriz não quadrada ou de dimensão inválida |
+| `EMATRIXSINGULAR` | 2006 | Matriz singular, sem decomposição LU única |
 
 ## Próximos passos
 
 - Produto interno, norma e produto vetorial
 - Transposta
 - Determinante e matriz inversa
-- Resolução de sistemas lineares (eliminação de Gauss, decomposição LU)
+- Resolução de sistemas lineares (eliminação de Gauss)
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal
