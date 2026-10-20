@@ -1,4 +1,5 @@
 #include "matrix.h"
+#include "lu.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -129,6 +130,46 @@ int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned 
 
   return 0;
 }
+
+Vector* matrix_get_line_vectors(const Matrix* a) {
+  if (a == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+
+  if (a->columns == NULL) {
+    errno = EVECTORNULL;
+    return NULL;
+  }
+
+  Vector* line_vectors = (Vector*)calloc(a->nlins, sizeof(Vector));
+  if (line_vectors == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int j = 0; j < a->nlins; j++) {
+    line_vectors[j].dim = a->ncols;
+    line_vectors[j].x = (double*)calloc(a->ncols, sizeof(double));
+
+    if (line_vectors[j].x == NULL) {
+      for (unsigned int k = 0; k < j; k++) {
+        free(line_vectors[k].x);
+      }
+
+      free(line_vectors);
+      errno = EVECTORNULL;
+      return NULL;
+    }
+
+    for (unsigned int i = 0; i < a->ncols; i++) {
+      line_vectors[j].x[i] = a->columns[i].x[j];
+    }
+  }
+
+  return line_vectors;
+}
+
 
 Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const double aij) {
   if (m == NULL) {
@@ -277,6 +318,43 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m) {
   }
 
   return c;
+}
+
+Matrix* matrix_transpose(const Matrix* m) {
+  Vector* line_vectors = matrix_get_line_vectors(m);
+  if (line_vectors == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  Matrix* t = matrix_create(m->ncols, m->nlins, line_vectors);
+  if (t == NULL) {
+    free(line_vectors);
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  return t;
+}
+
+Matrix* matrix_inverse(const Matrix* m) {
+  // TODO: inversa da matriz m
+  Matrix* inverse = matrix_create_empty(m->nlins, m->ncols);
+  if (inverse == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  return inverse;
+}
+
+double matrix_determinant(const Matrix* m) {
+  // TODO: determinante de m
+  LU* lu = lu_create_decomposition(m);
+  if (lu == NULL) {
+    errno = EMATRIXALLOCATION;
+    return -9999;
+  }
+  return 0.00;
 }
 
 void matrix_print(const Matrix* m, const char* matrix_label) {

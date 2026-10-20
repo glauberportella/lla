@@ -1,8 +1,10 @@
 #include <stdio.h>
-
+#include <errno.h>
 #include <assert.h>
+#include <math.h>
 #include "vector.h"
 #include "matrix.h"
+#include "lu.h"
 
 void test_matrix_create() {
   printf("--- TEST: matrix_create ---\n");
@@ -204,6 +206,73 @@ void test_matrix_print() {
   matrix_destroy(a);
 }
 
+void test_matrix_lu_decomposition() {
+  printf("--- TEST: matrix_lu_decomposition ---\n");
+
+  double v1[] = {2.0, 4.0, 8.0};
+  double v2[] = {1.0, 3.0, 7.0};
+  double v3[] = {1.0, 1.0, 3.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  LU* lu = lu_create_decomposition(a);
+  if (lu == NULL) {
+    printf("ERRO: %d", errno);
+  }
+  assert(lu != NULL);
+
+  matrix_println(lu->l, "L");
+  matrix_println(lu->u, "U");
+  matrix_println(lu->p, "P");
+
+  // P*A = L*U
+  Matrix* pa = matrix_mul(lu->p, a);
+  Matrix* lu_prod = matrix_mul(lu->l, lu->u);
+  assert(pa != NULL);
+  assert(lu_prod != NULL);
+
+  for (unsigned int i = 0; i < a->nlins; i++) {
+    for (unsigned int j = 0; j < a->ncols; j++) {
+      assert(fabs(matrix_get(pa, i, j) - matrix_get(lu_prod, i, j)) < 1e-9);
+    }
+  }
+
+  matrix_destroy(lu_prod);
+  matrix_destroy(pa);
+  lu_destroy(lu);
+  matrix_destroy(a);
+}
+
+void test_matrix_transpose() {
+  printf("--- TEST: matrix_transpose ---\n");
+
+  double v1[] = {2.0, 4.0, 8.0};
+  double v2[] = {1.0, 3.0, 7.0};
+  double v3[] = {1.0, 1.0, 3.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  Matrix* at = matrix_transpose(a);
+  assert(at != NULL);
+  matrix_println(at, "At");
+
+  matrix_destroy(at);
+  matrix_destroy(a);
+}
 
 int main() {
   test_matrix_create();
@@ -212,5 +281,7 @@ int main() {
   test_matrix_mul();
   test_matrix_mul_scalar();
   test_matrix_print();
+  test_matrix_lu_decomposition();
+  test_matrix_transpose();
   return 0;
 }

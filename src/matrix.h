@@ -9,10 +9,13 @@
 #define EMATRIXINVALIDLINEINDEX 2002
 #define EMATRIXINVALIDCOLINDEX  2003
 #define EMATRIXINVALIDMUL       2004
+#define EMATRIXINVALIDDIM       2005
+#define EMATRIXSINGULAR         2006
 #define EMATRIXNULL             2999
 
 typedef struct matrix_rn_t {
   Vector* columns;    // vetores colunas que compoem a matriz
+  Vector* lines;      // vetores linhas
   unsigned int nlins; // numero de linhas
   unsigned int ncols; // numero de colunas
 } Matrix;
@@ -29,6 +32,8 @@ void matrix_destroy(Matrix* m);
  * Retorna 0 se estão ok, -1 se indice de linha está fora da dimensão e 1 se indice de coluna está fora da dimensão.
  */
 int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned int j);
+Vector* matrix_get_line_vectors(const Matrix* a);
+
 
 /**
  * @brief matrix_set(Matrix*, const unsigned int, const unsigned int, double)
@@ -46,6 +51,9 @@ Matrix* matrix_add(const Matrix* a, const Matrix* b);
 Matrix* matrix_sub(const Matrix* a, const Matrix* b);
 Matrix* matrix_mul(const Matrix* a, const Matrix* b);
 Matrix* matrix_mul_scalar(const double scalar, const Matrix* m);
+Matrix* matrix_transpose(const Matrix* m);
+Matrix* matrix_inverse(const Matrix* m);
+double matrix_determinant(const Matrix* m);
 
 /**
  * Saída
