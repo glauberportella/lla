@@ -118,14 +118,14 @@ void test_vector_mul() {
   double coords[] = { -1.0, 2.0 };
   Vector* a = vector_create(2, coords);
   assert(a != NULL);
-  vector_println(a);
+  vector_println(a, "A");
 
   Vector* b = vector_mul(-2.0, a);
   assert(b != NULL);
   assert(b->dim == 2);
   assert(b->x[0] == 2.0);
   assert(b->x[1] == -4.0);
-  vector_println(b);
+  vector_println(b, "B = -2A");
 
   // Escalar zero
   Vector* c = vector_mul(0.0, a);
@@ -195,20 +195,23 @@ void test_vector_print() {
   double coords_a[] = { 1.0, -1.0 };
   Vector* a = vector_create(2, coords_a);
   assert(a != NULL);
-  vector_println(a);
+  vector_println(a, "A");
 
   double coords_b[] = { -1.0, 1.0 };
   Vector* b = vector_create(2, coords_b);
   assert(b != NULL);
-  vector_println(b);
+  vector_println(b, "B");
 
   Vector* c = vector_add(a, b);
   assert(c != NULL);
-  vector_println(c);
+  vector_println(c, "C = A + B");
 
   Vector* d = vector_sub(a, b);
   assert(d != NULL);
-  vector_println(d);
+  vector_println(d, "D = A - B");
+
+  // Sem rotulo
+  vector_println(a, NULL);
 
   vector_destroy(d);
   vector_destroy(c);

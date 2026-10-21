@@ -63,7 +63,7 @@ typedef struct matrix_rn_t {
 | `vector_sub(a, b)` | Retorna `a - b` |
 | `vector_mul(k, a)` | Retorna `k * a` |
 | `vector_inner_product(a, b)` | Retorna o produto interno `a · b` |
-| `vector_print(v)` / `vector_println(v)` | Imprime o vetor no formato `(x1, x2, ...)` |
+| `vector_print(v, label)` / `vector_println(v, label)` | Imprime o vetor no formato `(x1, x2, ...)`, prefixado com `label = ` quando o rótulo é informado |
 
 `vector_inner_product` devolve `NAN` (com `errno` definido) quando os vetores
 têm dimensões diferentes ou quando algum deles é nulo.

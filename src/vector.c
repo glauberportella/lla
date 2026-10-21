@@ -174,13 +174,17 @@ double vector_inner_product(const Vector* a, const Vector* b) {
   return p;
 }
 
-void vector_print(const Vector* v) {
+void vector_print(const Vector* v, const char* vector_label) {
   if (v == NULL) {
     errno = EVECTORNULL;
     fprintf(stderr, "==>ERRO: EVECTORNULL");
     return;
   }
-  
+
+  if (vector_label != NULL) {
+    printf("%s = ", vector_label);
+  }
+
   printf("(");
   for (unsigned int i = 0; i < v->dim; i++) {
     if (i + 1 < v->dim) {
@@ -192,8 +196,8 @@ void vector_print(const Vector* v) {
   printf(")");
 }
 
-void vector_println(const Vector* v) {
-  vector_print(v);
+void vector_println(const Vector* v, const char* vector_label) {
+  vector_print(v, vector_label);
   printf("\n");
 }
 

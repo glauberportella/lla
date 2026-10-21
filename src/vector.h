@@ -19,7 +19,7 @@ Vector* vector_sub(const Vector* a, const Vector* b);
 Vector* vector_mul(double scalar, const Vector* a);
 double vector_inner_product(const Vector* a, const Vector* b);
 
-void vector_print(const Vector* v);
-void vector_println(const Vector* v);
+void vector_print(const Vector* v, const char* vector_label);
+void vector_println(const Vector* v, const char* vector_label);
 
 #endif
