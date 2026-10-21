@@ -62,7 +62,11 @@ typedef struct matrix_rn_t {
 | `vector_add(a, b)` | Retorna `a + b` |
 | `vector_sub(a, b)` | Retorna `a - b` |
 | `vector_mul(k, a)` | Retorna `k * a` |
+| `vector_inner_product(a, b)` | Retorna o produto interno `a · b` |
 | `vector_print(v)` / `vector_println(v)` | Imprime o vetor no formato `(x1, x2, ...)` |
+
+`vector_inner_product` devolve `NAN` (com `errno` definido) quando os vetores
+têm dimensões diferentes ou quando algum deles é nulo.
 
 ### Matrizes (`matrix.h`)
 
@@ -157,7 +161,8 @@ int main(void) {
 
 ## Tratamento de erros
 
-Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get`) e definem `errno` com um dos códigos abaixo:
+Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get`
+e `vector_inner_product`) e definem `errno` com um dos códigos abaixo:
 
 | Código | Valor | Significado |
 | --- | --- | --- |
@@ -176,7 +181,7 @@ Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get
 
 ## Próximos passos
 
-- Produto interno, norma e produto vetorial
+- Norma e produto vetorial
 - Resolução de sistemas lineares (eliminação de Gauss)
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal

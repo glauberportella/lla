@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stddef.h>
+#include <math.h>
 
 Vector* vector_create_empty(unsigned int dim) {
   if (dim == 0) {
@@ -152,6 +153,25 @@ Vector* vector_mul(double scalar, const Vector* a) {
   }
   
   return v;
+}
+
+double vector_inner_product(const Vector* a, const Vector* b) {
+  if (a == NULL || b == NULL) {
+    errno = EVECTORNULL;
+    return NAN;
+  }
+
+  if (a->dim != b->dim) {
+    errno = EINVALIDDIM;
+    return NAN;
+  }
+
+  double p = 0.00;
+  for (unsigned int i = 0; i< a->dim; i++) {
+    p += a->x[i]* b->x[i];
+  }
+
+  return p;
 }
 
 void vector_print(const Vector* v) {
