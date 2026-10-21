@@ -6,6 +6,316 @@
 #include "matrix.h"
 #include "lu.h"
 
+void test_vector_create_empty() {
+  printf("--- TEST: vector_create_empty ---\n");
+
+  Vector* a = vector_create_empty(3);
+  assert(a != NULL);
+  assert(a->dim == 3);
+
+  for (unsigned int i = 0; i < a->dim; i++) {
+    assert(a->x[i] == 0.0);
+  }
+
+  vector_destroy(a);
+
+  // Dimensao invalida
+  assert(vector_create_empty(0) == NULL);
+  assert(errno == EINVALIDDIM);
+}
+
+void test_vector_create() {
+  printf("--- TEST: vector_create ---\n");
+
+  double coords[] = { 1.0, -1.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+  assert(a->dim == 2);
+  assert(a->x[0] == 1.0);
+  assert(a->x[1] == -1.0);
+
+  vector_destroy(a);
+
+  // Dimensao invalida
+  double coords_invalidos[] = { 1.0 };
+  assert(vector_create(0, coords_invalidos) == NULL);
+  assert(errno == EINVALIDDIM);
+}
+
+void test_vector_add() {
+  printf("--- TEST: vector_add ---\n");
+
+  double coords_a[] = { 1.0, -1.0 };
+  Vector* a = vector_create(2, coords_a);
+  assert(a != NULL);
+
+  double coords_b[] = { -1.0, 1.0 };
+  Vector* b = vector_create(2, coords_b);
+  assert(b != NULL);
+
+  Vector* c = vector_add(a, b);
+  assert(c != NULL);
+  assert(c->dim == 2);
+  assert(c->x[0] == 0.0);
+  assert(c->x[1] == 0.0);
+
+  // Vetor nulo
+  assert(vector_add(a, NULL) == NULL);
+  assert(errno == EVECTORNULL);
+
+  // Dimensao invalida
+  double coords_d[] = { 1.0, 2.0, 3.0 };
+  Vector* d = vector_create(3, coords_d);
+  assert(d != NULL);
+
+  assert(vector_add(a, d) == NULL);
+  assert(errno == EINVALIDDIM);
+
+  vector_destroy(d);
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_sub() {
+  printf("--- TEST: vector_sub ---\n");
+
+  double coords_a[] = { 1.0, -1.0 };
+  Vector* a = vector_create(2, coords_a);
+  assert(a != NULL);
+
+  double coords_b[] = { -1.0, 1.0 };
+  Vector* b = vector_create(2, coords_b);
+  assert(b != NULL);
+
+  Vector* c = vector_sub(a, b);
+  assert(c != NULL);
+  assert(c->dim == 2);
+  assert(c->x[0] == 2.0);
+  assert(c->x[1] == -2.0);
+
+  // Vetor nulo
+  assert(vector_sub(a, NULL) == NULL);
+  assert(errno == EVECTORNULL);
+
+  // Dimensao invalida
+  double coords_d[] = { 1.0, 2.0, 3.0 };
+  Vector* d = vector_create(3, coords_d);
+  assert(d != NULL);
+
+  assert(vector_sub(a, d) == NULL);
+  assert(errno == EINVALIDDIM);
+
+  vector_destroy(d);
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_mul() {
+  printf("--- TEST: vector_mul ---\n");
+
+  double coords[] = { -1.0, 2.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+  vector_println(a, "A");
+
+  Vector* b = vector_mul(-2.0, a);
+  assert(b != NULL);
+  assert(b->dim == 2);
+  assert(b->x[0] == 2.0);
+  assert(b->x[1] == -4.0);
+  vector_println(b, "B = -2A");
+
+  // Escalar zero
+  Vector* c = vector_mul(0.0, a);
+  assert(c != NULL);
+  assert(c->x[0] == 0.0);
+  assert(c->x[1] == 0.0);
+
+  // Vetor nulo
+  assert(vector_mul(2.0, NULL) == NULL);
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_inner_product() {
+  printf("--- TEST: vector_inner_product ---\n");
+
+  double coords_a[] = { 1.0, 2.0, 3.0 };
+  Vector* a = vector_create(3, coords_a);
+  assert(a != NULL);
+
+  double coords_b[] = { 4.0, 5.0, 6.0 };
+  Vector* b = vector_create(3, coords_b);
+  assert(b != NULL);
+
+  // 1*4 + 2*5 + 3*6 = 32
+  double p = vector_inner_product(a, b);
+  assert(!isnan(p));
+  assert(fabs(p - 32.0) < 1e-9);
+  printf("A . B = %.2f\n", p);
+
+  // Vetores ortogonais
+  double coords_c[] = { 1.0, 0.0, 0.0 };
+  Vector* c = vector_create(3, coords_c);
+  assert(c != NULL);
+
+  double coords_d[] = { 0.0, 1.0, 0.0 };
+  Vector* d = vector_create(3, coords_d);
+  assert(d != NULL);
+
+  assert(fabs(vector_inner_product(c, d)) < 1e-9);
+
+  // Dimensao invalida
+  double coords_e[] = { 1.0, 2.0 };
+  Vector* e = vector_create(2, coords_e);
+  assert(e != NULL);
+
+  assert(isnan(vector_inner_product(a, e)));
+  assert(errno == EINVALIDDIM);
+
+  // Vetor nulo
+  assert(isnan(vector_inner_product(a, NULL)));
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(e);
+  vector_destroy(d);
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_norm_p() {
+  printf("--- TEST: vector_norm_p ---\n");
+
+  double coords[] = { -3.0, 4.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // p = 1: 3 + 4 = 7
+  double n1 = vector_norm_p(a, 1);
+  assert(!isnan(n1));
+  assert(fabs(n1 - 7.0) < 1e-9);
+  printf("||A||_1 = %.2f\n", n1);
+
+  // p = 2: sqrt(9 + 16) = 5
+  double n2 = vector_norm_p(a, 2);
+  assert(!isnan(n2));
+  assert(fabs(n2 - 5.0) < 1e-9);
+  printf("||A||_2 = %.2f\n", n2);
+
+  // p = 3: (27 + 64)^(1/3)
+  double n3 = vector_norm_p(a, 3);
+  assert(!isnan(n3));
+  assert(fabs(n3 - 4.497941445275415) < 1e-9);
+  printf("||A||_3 = %.2f\n", n3);
+
+  // Vetor nulo
+  assert(isnan(vector_norm_p(NULL, 2)));
+  assert(errno == EVECTORNULL);
+
+  // Ordem invalida
+  assert(isnan(vector_norm_p(a, 0)));
+  assert(errno == EINVALIDP);
+
+  vector_destroy(a);
+}
+
+void test_vector_norm_inf() {
+  printf("--- TEST: vector_norm_inf ---\n");
+
+  double coords[] = { -4.0, 3.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // max(|x_i|) = 4
+  double n = vector_norm_inf(a);
+  assert(!isnan(n));
+  assert(fabs(n - 4.0) < 1e-9);
+  printf("||A||_inf = %.2f\n", n);
+
+  // Todas as coordenadas negativas
+  double coords_b[] = { -4.0, -3.0 };
+  Vector* b = vector_create(2, coords_b);
+  assert(b != NULL);
+
+  double n_b = vector_norm_inf(b);
+  assert(!isnan(n_b));
+  assert(fabs(n_b - 4.0) < 1e-9);
+
+  // Vetor zerado
+  double coords_c[] = { 0.0, 0.0 };
+  Vector* c = vector_create(2, coords_c);
+  assert(c != NULL);
+
+  assert(fabs(vector_norm_inf(c)) < 1e-9);
+
+  // Vetor nulo passado como argumento
+  assert(isnan(vector_norm_inf(NULL)));
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_norm() {
+  printf("--- TEST: vector_norm ---\n");
+
+  double coords[] = { 3.0, 4.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // sqrt(9 + 16) = 5
+  double n = vector_norm(a);
+  assert(!isnan(n));
+  assert(fabs(n - 5.0) < 1e-9);
+  printf("||A|| = %.2f\n", n);
+
+  // Equivale a vector_norm_p com p = 2
+  assert(fabs(vector_norm(a) - vector_norm_p(a, 2)) < 1e-9);
+
+  // Vetor nulo
+  assert(isnan(vector_norm(NULL)));
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(a);
+}
+
+void test_vector_print() {
+  printf("--- TEST: vector_print ---\n");
+
+  double coords_a[] = { 1.0, -1.0 };
+  Vector* a = vector_create(2, coords_a);
+  assert(a != NULL);
+  vector_println(a, "A");
+
+  double coords_b[] = { -1.0, 1.0 };
+  Vector* b = vector_create(2, coords_b);
+  assert(b != NULL);
+  vector_println(b, "B");
+
+  Vector* c = vector_add(a, b);
+  assert(c != NULL);
+  vector_println(c, "C = A + B");
+
+  Vector* d = vector_sub(a, b);
+  assert(d != NULL);
+  vector_println(d, "D = A - B");
+
+  // Sem rotulo
+  vector_println(a, NULL);
+
+  vector_destroy(d);
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
 void test_matrix_create() {
   printf("--- TEST: matrix_create ---\n");
 
@@ -343,7 +653,7 @@ void test_matrix_determinant() {
 
   matrix_destroy(a);
 
-  // Matriz que exige pivoteamento: det = -1
+  // Matriz que exige pivotamento: det = -1
   double p1[] = {0.0, 1.0};
   double p2[] = {1.0, 0.0};
   Vector colunas_piv[] = {
@@ -397,6 +707,16 @@ void test_matrix_determinant() {
 }
 
 int main() {
+  test_vector_create_empty();
+  test_vector_create();
+  test_vector_add();
+  test_vector_sub();
+  test_vector_mul();
+  test_vector_inner_product();
+  test_vector_norm_p();
+  test_vector_norm_inf();
+  test_vector_norm();
+  test_vector_print();
   test_matrix_create();
   test_matrix_add();
   test_matrix_sub();
