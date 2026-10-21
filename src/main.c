@@ -189,6 +189,103 @@ void test_vector_inner_product() {
   vector_destroy(a);
 }
 
+void test_vector_norm_p() {
+  printf("--- TEST: vector_norm_p ---\n");
+
+  double coords[] = { -3.0, 4.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // p = 1: 3 + 4 = 7
+  double n1 = vector_norm_p(a, 1);
+  assert(!isnan(n1));
+  assert(fabs(n1 - 7.0) < 1e-9);
+  printf("||A||_1 = %.2f\n", n1);
+
+  // p = 2: sqrt(9 + 16) = 5
+  double n2 = vector_norm_p(a, 2);
+  assert(!isnan(n2));
+  assert(fabs(n2 - 5.0) < 1e-9);
+  printf("||A||_2 = %.2f\n", n2);
+
+  // p = 3: (27 + 64)^(1/3)
+  double n3 = vector_norm_p(a, 3);
+  assert(!isnan(n3));
+  assert(fabs(n3 - 4.497941445275415) < 1e-9);
+  printf("||A||_3 = %.2f\n", n3);
+
+  // Vetor nulo
+  assert(isnan(vector_norm_p(NULL, 2)));
+  assert(errno == EVECTORNULL);
+
+  // Ordem invalida
+  assert(isnan(vector_norm_p(a, 0)));
+  assert(errno == EINVALIDP);
+
+  vector_destroy(a);
+}
+
+void test_vector_norm_inf() {
+  printf("--- TEST: vector_norm_inf ---\n");
+
+  double coords[] = { -4.0, 3.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // max(|x_i|) = 4
+  double n = vector_norm_inf(a);
+  assert(!isnan(n));
+  assert(fabs(n - 4.0) < 1e-9);
+  printf("||A||_inf = %.2f\n", n);
+
+  // Todas as coordenadas negativas
+  double coords_b[] = { -4.0, -3.0 };
+  Vector* b = vector_create(2, coords_b);
+  assert(b != NULL);
+
+  double n_b = vector_norm_inf(b);
+  assert(!isnan(n_b));
+  assert(fabs(n_b - 4.0) < 1e-9);
+
+  // Vetor zerado
+  double coords_c[] = { 0.0, 0.0 };
+  Vector* c = vector_create(2, coords_c);
+  assert(c != NULL);
+
+  assert(fabs(vector_norm_inf(c)) < 1e-9);
+
+  // Vetor nulo passado como argumento
+  assert(isnan(vector_norm_inf(NULL)));
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(c);
+  vector_destroy(b);
+  vector_destroy(a);
+}
+
+void test_vector_norm() {
+  printf("--- TEST: vector_norm ---\n");
+
+  double coords[] = { 3.0, 4.0 };
+  Vector* a = vector_create(2, coords);
+  assert(a != NULL);
+
+  // sqrt(9 + 16) = 5
+  double n = vector_norm(a);
+  assert(!isnan(n));
+  assert(fabs(n - 5.0) < 1e-9);
+  printf("||A|| = %.2f\n", n);
+
+  // Equivale a vector_norm_p com p = 2
+  assert(fabs(vector_norm(a) - vector_norm_p(a, 2)) < 1e-9);
+
+  // Vetor nulo
+  assert(isnan(vector_norm(NULL)));
+  assert(errno == EVECTORNULL);
+
+  vector_destroy(a);
+}
+
 void test_vector_print() {
   printf("--- TEST: vector_print ---\n");
 
@@ -616,6 +713,9 @@ int main() {
   test_vector_sub();
   test_vector_mul();
   test_vector_inner_product();
+  test_vector_norm_p();
+  test_vector_norm_inf();
+  test_vector_norm();
   test_vector_print();
   test_matrix_create();
   test_matrix_add();
