@@ -209,6 +209,14 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
   return column_vector->x[i];
 }
 
+void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x) {
+  Vector vector = {
+    .dim = xlen,
+    .x = x
+  };
+  m->columns[i] = vector;
+}
+
 Matrix* matrix_add(const Matrix* a, const Matrix* b) {
   if (a == NULL || b == NULL) {
     errno = EMATRIXNULL;
@@ -338,13 +346,174 @@ Matrix* matrix_transpose(const Matrix* m) {
 }
 
 Matrix* matrix_inverse(const Matrix* m) {
-  // TODO: inversa da matriz m
-  Matrix* inverse = matrix_create_empty(m->nlins, m->ncols);
-  if (inverse == NULL) {
-    errno = EMATRIXALLOCATION;
+  /*
+  Entrada: Matrizes L, U, P de tamanho n x n (onde PA = LU)
+  Saída: Matriz A_inv (inversa de A)
+
+  1. Inicializar A_inv como uma matriz vazia de tamanho n x n.
+  2. Criar a matriz Identidade I de tamanho n x n.
+
+  3. Para cada coluna i de 1 até n:
+     a. Obter a i-ésima coluna de I, chamada e_i.
+     b. Aplicar a permutação: b = P * e_i (apenas rearranja as linhas do vetor e_i).
+     
+     c. [Substituição Direta] Resolver L * y = b:
+        Para k de 1 até n:
+          y[k] = b[k] - (soma de L[k][j] * y[j] para j de 1 até k-1)
+          // Nota: L[k][k] é sempre 1 na decomposição LU padrão, 
+          // caso contrário, dividiria o resultado por L[k][k].
+          
+     d. [Substituição Retroativa] Resolver U * x = y:
+        Para k de n decrescendo até 1:
+          x[k] = (y[k] - (soma de U[k][j] * x[j] para j de k+1 até n)) / U[k][k]
+          
+     e. Salvar o vetor x como a i-ésima coluna de A_inv (A_inv[:, i] = x).
+
+  4. Retornar A_inv.
+  */
+
+  if (m == NULL) {
+    errno = EMATRIXNULL;
     return NULL;
   }
-  return inverse;
+
+  if (m->nlins != m->ncols) {
+    errno = EMATRIXINVALIDDIM;
+    return NULL;
+  }
+
+  // Decomposição LU
+  LU* lu = lu_create_decomposition(m);
+  if (lu == NULL) {
+    // Preservando o tratamento de erro original
+    return NULL;
+  }
+
+  unsigned int i, j;
+  unsigned int n = m->nlins;
+
+  // Inversa a ser retornada
+  Matrix* inv = matrix_create_empty(n, n);
+  if (inv == NULL) {
+    lu_destroy(lu);
+    return NULL;
+  }
+
+  // Identidade
+  Matrix* id = matrix_create_empty(n, n);
+  if (id == NULL) {
+    matrix_destroy(inv);
+    lu_destroy(lu);
+    return NULL;
+  }
+
+  for (i = 0; i < n; i++) {
+    for (j = 0; j < n; j++) {
+      matrix_set(inv, i, j, 0.0);
+      if (i == j) {
+        matrix_set(id, i, j, 1.0);
+      } else {
+        matrix_set(id, i, j, 0.0);
+      }
+    }
+  }
+
+  // Loop principal para cada coluna i da inversa
+  for (i = 0; i < n; i++) {
+    // e_i = i-ésima coluna de I
+    Matrix* ei = matrix_create(n, 1, &id->columns[i]);
+    if (ei == NULL) {
+      matrix_destroy(inv);
+      matrix_destroy(id);
+      lu_destroy(lu);
+      return NULL;
+    }
+
+    // aplica permutação b = P * e_i
+    Matrix* b = matrix_mul(lu->p, ei);
+    if (b == NULL) {
+      matrix_destroy(ei);
+      matrix_destroy(inv);
+      matrix_destroy(id);
+      lu_destroy(lu);
+      return NULL;
+    }
+
+    // calloc já inicializa com zero, não precisa de loop extra
+    double* y = (double*)calloc(n, sizeof(double));
+    if (y == NULL) {
+      matrix_destroy(b);
+      matrix_destroy(ei);
+      matrix_destroy(inv);
+      matrix_destroy(id);
+      lu_destroy(lu);
+      errno = EVECTORALLOCATION;
+      return NULL;
+    }
+
+    // Substituição direta - resolver Ly = b
+    for (unsigned int k = 0; k < n; k++) {
+      double soma_ly = 0.0;
+      for (j = 0; j < k; j++) { // CORRIGIDO: j < k para ir até k-1
+        soma_ly += matrix_get(lu->l, k, j) * y[j];
+      }
+      // CORRIGIDO: O índice da coluna de b é 0, pois b é n x 1
+      y[k] = matrix_get(b, k, 0) - soma_ly;
+    }
+
+    double* x = (double*)calloc(n, sizeof(double));
+    if (x == NULL) {
+      free(y);
+      matrix_destroy(b);
+      matrix_destroy(ei);
+      matrix_destroy(inv);
+      matrix_destroy(id);
+      lu_destroy(lu);
+      errno = EVECTORALLOCATION;
+      return NULL;
+    }
+
+    // Substituição retroativa - resolver Ux = y
+    // CORRIGIDO: Cast para int para evitar estouro negativo com unsigned int
+    for (int k = (int)n - 1; k >= 0; k--) {
+      double soma_ux = 0.0;
+      // CORRIGIDO: Varre de k+1 até n, sem embutir a divisão dentro do laço
+      for (j = (unsigned int)k + 1; j < n; j++) {
+        soma_ux += matrix_get(lu->u, (unsigned int)k, j) * x[j];
+      }
+
+      double ukk = matrix_get(lu->u, (unsigned int)k, (unsigned int)k);
+      // Proteção contra divisão por zero em matrizes não invertíveis
+      if (fabs(ukk) < 1e-9) {
+        free(y);
+        free(x);
+        matrix_destroy(b);
+        matrix_destroy(ei);
+        matrix_destroy(inv);
+        matrix_destroy(id);
+        lu_destroy(lu);
+        errno = EMATRIXINVALIDMUL;
+        return NULL;
+      }
+      x[k] = (y[k] - soma_ux) / ukk;
+    }
+
+    // salvar vetor x como i-ésima coluna da inv.
+    // Como x foi alocado com malloc/calloc, sua função matrix_add_column_vector_at
+    // assume a posse dele perfeitamente
+    matrix_add_column_vector_at(inv, i, n, x);
+
+    // CORRIGIDO: Liberar a memória dos objetos criados NESTA iteração do loop
+    free(y);
+    matrix_destroy(b);
+    matrix_destroy(ei);
+  }
+
+  // Limpeza final de memória
+  matrix_destroy(id);
+  lu_destroy(lu);
+
+  return inv;
 }
 
 double matrix_determinant(const Matrix* m) {
