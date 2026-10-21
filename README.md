@@ -78,7 +78,13 @@ typedef struct matrix_rn_t {
 | `matrix_sub(a, b)` | Retorna `A - B` |
 | `matrix_mul(a, b)` | Retorna o produto `A x B` |
 | `matrix_mul_scalar(k, a)` | Retorna `k * A` |
+| `matrix_transpose(a)` | Retorna `Aᵀ` |
+| `matrix_inverse(a)` | Retorna `A⁻¹` (matriz quadrada) via decomposição LU |
+| `matrix_determinant(a)` | Retorna `det(A)` (matriz quadrada) via decomposição LU |
 | `matrix_print(m, label)` / `matrix_println(m, label)` | Imprime a matriz com um rótulo |
+
+`matrix_determinant` devolve `0.0` para matrizes singulares e `NAN` (com `errno`
+definido) para matriz nula, matriz não quadrada ou falha de alocação.
 
 Toda função que retorna um novo `Vector*` ou `Matrix*` aloca memória, que deve ser liberada pelo chamador com `vector_destroy` ou `matrix_destroy`.
 
@@ -166,12 +172,11 @@ Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get
 | `EMATRIXNULL` | 2999 | Matriz nula passada como argumento |
 | `EMATRIXINVALIDDIM` | 2005 | Matriz não quadrada ou de dimensão inválida |
 | `EMATRIXSINGULAR` | 2006 | Matriz singular, sem decomposição LU única |
+| `EMATRIXINVALIDDETERMINANT` | 2007 | Falha ao calcular o determinante |
 
 ## Próximos passos
 
 - Produto interno, norma e produto vetorial
-- Transposta
-- Determinante e matriz inversa
 - Resolução de sistemas lineares (eliminação de Gauss)
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal
