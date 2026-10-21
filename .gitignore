@@ -1,2 +1,4 @@
 al
 *.dSYM
+*.c.swp
+*.h.swp

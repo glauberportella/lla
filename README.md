@@ -62,7 +62,19 @@ typedef struct matrix_rn_t {
 | `vector_add(a, b)` | Retorna `a + b` |
 | `vector_sub(a, b)` | Retorna `a - b` |
 | `vector_mul(k, a)` | Retorna `k * a` |
-| `vector_print(v)` / `vector_println(v)` | Imprime o vetor no formato `(x1, x2, ...)` |
+| `vector_inner_product(a, b)` | Retorna o produto interno `a · b` |
+| `vector_norm_p(a, p)` | Retorna a norma `p` de `a`: `(Σ |xᵢ|^p)^(1/p)` |
+| `vector_norm_inf(a)` | Retorna a norma infinita de `a`: `max(|xᵢ|)` |
+| `vector_norm(a)` | Retorna a norma euclidiana de `a`: `sqrt(Σ xᵢ²)` |
+| `vector_print(v, label)` / `vector_println(v, label)` | Imprime o vetor no formato `(x1, x2, ...)`, prefixado com `label = ` quando o rótulo é informado |
+
+`vector_inner_product` devolve `NAN` (com `errno` definido) quando os vetores
+têm dimensões diferentes ou quando algum deles é nulo.
+
+As funções de norma devolvem `NAN` (com `errno` definido) quando recebem um
+vetor nulo ou, no caso de `vector_norm_p`, quando `p` é zero
+(`errno = EINVALIDP`). `vector_norm` é equivalente a `vector_norm_p` com
+`p = 2`.
 
 ### Matrizes (`matrix.h`)
 
@@ -157,13 +169,16 @@ int main(void) {
 
 ## Tratamento de erros
 
-Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get`) e definem `errno` com um dos códigos abaixo:
+Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get`,
+`vector_inner_product` e das funções de norma) e definem `errno` com um dos
+códigos abaixo:
 
 | Código | Valor | Significado |
 | --- | --- | --- |
 | `EINVALIDDIM` | 1000 | Dimensão de vetor inválida ou incompatível |
 | `EVECTORALLOCATION` | 1001 | Falha ao alocar vetor |
 | `EVECTORNULL` | 1002 | Vetor nulo passado como argumento |
+| `EINVALIDP` | 1003 | Ordem `p` inválida para a norma de vetor |
 | `EMATRIXALLOCATION` | 2000 | Falha ao alocar matriz |
 | `EMATRIXINVALIDADDDIM` | 2001 | Dimensões incompatíveis para soma/subtração |
 | `EMATRIXINVALIDLINEINDEX` | 2002 | Índice de linha fora dos limites |
@@ -176,7 +191,7 @@ Em caso de falha, as funções retornam `NULL` (ou `NAN`, no caso de `matrix_get
 
 ## Próximos passos
 
-- Produto interno, norma e produto vetorial
 - Resolução de sistemas lineares (eliminação de Gauss)
+- Produto vetorial e normas entre vetores
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal

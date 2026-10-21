@@ -4,6 +4,7 @@
 #define EINVALIDDIM       1000
 #define EVECTORALLOCATION 1001
 #define EVECTORNULL       1002
+#define EINVALIDP         1003
 
 typedef struct vector_rn_t {
   double* x;
@@ -17,8 +18,12 @@ void vector_destroy(Vector* v);
 Vector* vector_add(const Vector* a, const Vector* b);
 Vector* vector_sub(const Vector* a, const Vector* b);
 Vector* vector_mul(double scalar, const Vector* a);
+double vector_inner_product(const Vector* a, const Vector* b);
+double vector_norm_p(const Vector* a, unsigned int p);
+double vector_norm_inf(const Vector* a);
+double vector_norm(const Vector* a);
 
-void vector_print(const Vector* v);
-void vector_println(const Vector* v);
+void vector_print(const Vector* v, const char* vector_label);
+void vector_println(const Vector* v, const char* vector_label);
 
 #endif
