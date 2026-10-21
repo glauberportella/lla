@@ -43,6 +43,7 @@ Vector* matrix_get_line_vectors(const Matrix* a);
  */ 
 Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const double aij);
 double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j);
+void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x);
 
 /**
  * Operações

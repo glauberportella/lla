@@ -274,6 +274,30 @@ void test_matrix_transpose() {
   matrix_destroy(a);
 }
 
+void test_matrix_inverse() {
+  printf("--- TEST: matrix_inverse ---\n");
+
+  double v1[] = {2.0, 4.0, 8.0};
+  double v2[] = {1.0, 3.0, 7.0};
+  double v3[] = {1.0, 1.0, 3.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  Matrix* inverse = matrix_inverse(a);
+  assert(inverse != NULL);
+  matrix_println(inverse, "A^-1");
+
+  matrix_destroy(inverse);
+  matrix_destroy(a);
+}
+
 int main() {
   test_matrix_create();
   test_matrix_add();
@@ -283,5 +307,6 @@ int main() {
   test_matrix_print();
   test_matrix_lu_decomposition();
   test_matrix_transpose();
+  test_matrix_inverse();
   return 0;
 }
