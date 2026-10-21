@@ -270,6 +270,15 @@ void test_matrix_transpose() {
   assert(at != NULL);
   matrix_println(at, "At");
 
+  assert(at->nlins == a->ncols);
+  assert(at->ncols == a->nlins);
+
+  for (unsigned int i = 0; i < a->nlins; i++) {
+    for (unsigned int j = 0; j < a->ncols; j++) {
+      assert(fabs(matrix_get(at, i, j) - matrix_get(a, j, i)) < 1e-9);
+    }
+  }
+
   matrix_destroy(at);
   matrix_destroy(a);
 }
@@ -294,8 +303,97 @@ void test_matrix_inverse() {
   assert(inverse != NULL);
   matrix_println(inverse, "A^-1");
 
+  // A * A^-1 = I
+  Matrix* product = matrix_mul(a, inverse);
+  assert(product != NULL);
+
+  for (unsigned int i = 0; i < a->nlins; i++) {
+    for (unsigned int j = 0; j < a->ncols; j++) {
+      double expected = (i == j) ? 1.0 : 0.0;
+      assert(fabs(matrix_get(product, i, j) - expected) < 1e-9);
+    }
+  }
+
+  matrix_destroy(product);
   matrix_destroy(inverse);
   matrix_destroy(a);
+}
+
+void test_matrix_determinant() {
+  printf("--- TEST: matrix_determinant ---\n");
+
+  double v1[] = {-3.0, 1.0, -2.0};
+  double v2[] = {2.0, 5.0, 1.5};
+  double v3[] = {3.0, 2.0, 2.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  // det(A) = 1.5
+  double det = matrix_determinant(a);
+  assert(!isnan(det));
+  assert(fabs(det - 1.5) < 1e-9);
+  printf("Det(A) = %.2f\n", det);
+
+  matrix_destroy(a);
+
+  // Matriz que exige pivoteamento: det = -1
+  double p1[] = {0.0, 1.0};
+  double p2[] = {1.0, 0.0};
+  Vector colunas_piv[] = {
+    { .dim = 2, .x = p1 },
+    { .dim = 2, .x = p2 },
+  };
+
+  Matrix* b = matrix_create(2, 2, colunas_piv);
+  assert(b != NULL);
+
+  double det_b = matrix_determinant(b);
+  assert(!isnan(det_b));
+  assert(fabs(det_b + 1.0) < 1e-9);
+  printf("Det(B) = %.2f\n", det_b);
+
+  matrix_destroy(b);
+
+  // Matriz singular: det = 0
+  double s1[] = {1.0, 2.0};
+  double s2[] = {2.0, 4.0};
+  Vector colunas_sing[] = {
+    { .dim = 2, .x = s1 },
+    { .dim = 2, .x = s2 },
+  };
+
+  Matrix* c = matrix_create(2, 2, colunas_sing);
+  assert(c != NULL);
+
+  double det_c = matrix_determinant(c);
+  assert(fabs(det_c) < 1e-9);
+  printf("Det(C) = %.2f\n", det_c);
+
+  matrix_destroy(c);
+
+  // Matriz nula e matriz nao quadrada
+  assert(isnan(matrix_determinant(NULL)));
+  assert(errno == EMATRIXNULL);
+
+  double n1[] = {1.0, 2.0};
+  Vector colunas_ret[] = {
+    { .dim = 2, .x = n1 },
+  };
+
+  Matrix* d = matrix_create(2, 1, colunas_ret);
+  assert(d != NULL);
+
+  assert(isnan(matrix_determinant(d)));
+  assert(errno == EMATRIXINVALIDDIM);
+
+  matrix_destroy(d);
 }
 
 int main() {
@@ -308,5 +406,6 @@ int main() {
   test_matrix_lu_decomposition();
   test_matrix_transpose();
   test_matrix_inverse();
+  test_matrix_determinant();
   return 0;
 }
