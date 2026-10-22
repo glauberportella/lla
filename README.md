@@ -4,6 +4,8 @@ Biblioteca pequena em C para operações de álgebra linear com vetores e matriz
 
 O objetivo é manter o código simples, sem dependências externas além da biblioteca padrão do C, e fácil de incorporar em outros projetos.
 
+Por ser um projeto recreativo, a biblioteca prioriza clareza sobre desempenho bruto. Na prática isso significa que as matrizes são guardadas como vetores coluna, com uma alocação por coluna, e que todo acesso valida os índices — o que torna as operações O(n³) (produto, LU, determinante, inversa) bem mais lentas do que uma implementação otimizada. A seção [Limites de dimensão](#limites-de-dimensão) traz os números concretos: em resumo, matrizes de até algumas centenas de linhas são tranquilamente usáveis, e a partir de ~1000 as operações cúbicas começam a ficar pesadas.
+
 ## Estrutura
 
 ```
@@ -13,7 +15,9 @@ O objetivo é manter o código simples, sem dependências externas além da bibl
     ├── vector.h / vector.c   # tipo Vector e operações sobre vetores
     ├── matrix.h / matrix.c   # tipo Matrix e operações sobre matrizes
     ├── lu.h / lu.c           # decomposição LU com pivoteamento parcial
-    └── main.c                # testes
+    ├── main.c                # testes
+    ├── bech.c                # benchmark de performance
+    └── lim.c                 # limites de dimensão
 ```
 
 ## Compilação
@@ -21,11 +25,114 @@ O objetivo é manter o código simples, sem dependências externas além da bibl
 Requer `gcc` (ou outro compilador C99 compatível) e `make`.
 
 ```sh
-make build   # gera o executável ./al
-make run     # executa os testes
+make build      # gera o executável ./al
+make run        # executa os testes
+make bench      # gera o executável ./bech
+make bench-run  # compila e executa o benchmark
+make lim        # gera o executável ./lim
+make lim-run    # compila e executa a busca de limites
+make clean      # remove os executáveis
 ```
 
 O build usa `-Wall -Wextra -Werror`, então qualquer aviso interrompe a compilação.
+
+## Benchmark
+
+`src/bech.c` mede o desempenho das operações de matriz em dimensões
+quadradas crescentes. Por padrão roda com as dimensões **5, 10, 20 e 50**,
+podendo ser executado com outras dimensões:
+
+```sh
+./bech            # 5, 10, 20, 50
+./bech 3 7 100    # dimensões customizadas (1 a 512)
+```
+
+Para cada dimensão o benchmark gera duas matrizes pseudoaleatórias
+diagonalmente dominantes (portanto não singulares) e mede, em regime de
+tempo constante, as operações `matrix_mul`, `matrix_add`, `matrix_sub`,
+`matrix_mul_scalar`, `matrix_transpose`, a decomposição LU, o determinante e
+a inversa. A saída traz, por operação, o número de iterações, o tempo total,
+os milissegundos por operação, o throughput e uma estimativa em MFLOP/s,
+seguida de uma tabela de escala (ms por operação em cada dimensão) e dos
+checksums usados para verificar a consistência dos resultados.
+
+Como a biblioteca aloca o resultado de cada operação, os tempos medidos
+incluem o custo de alocação e liberação de memória.
+
+## Limites de dimensão
+
+`src/lim.c` procura a maior matriz quadrada que a biblioteca ainda consegue
+operar. Para cada operação, a busca dobra a dimensão (8, 16, 32, ...) e usa
+o expoente de complexidade medido entre duas execuções para prever o custo
+do próximo passo, de modo a não travar em operações O(n³).
+
+```sh
+./lim        # orçamento padrão de 10 s por execução
+./lim 2.5    # orçamento de 2,5 s por execução
+```
+
+O programa relata três limites:
+
+- **memória**: até onde as alocações da biblioteca têm sucesso (a busca é
+  limitada a 60% da memória física da máquina);
+- **tempo**: até onde cada operação cabe no orçamento de tempo;
+- **numérico**: se o resultado ainda bate com uma implementação de
+  referência independente no maior tamanho suportado.
+
+Também é reportado o tamanho a partir do qual o determinante deixa de caber
+em um `double` (cresce exponencialmente com n) e passa a devolver `inf`.
+
+### Números medidos
+
+Medidos com `./lim 10` (orçamento de 10 s por execução) em um Mac com 8 GB de
+memória, com matrizes quadradas aleatórias e diagonalmente dominantes. Os
+valores dependem do hardware e do orçamento de tempo, mas a ordem de grandeza
+é a mesma em qualquer máquina moderna:
+
+| Operação | Maior `n` | Tempo em `n` | Limite |
+| --- | --- | --- | --- |
+| `matrix_transpose` | 8192 | 1,4 s | memória |
+| `matrix_add` | 8192 | 6,4 s | memória |
+| `matrix_sub` | 8192 | 8,0 s | memória |
+| `matrix_mul_scalar` | 8192 | 3,4 s | memória |
+| `matrix_mul` | 512 | 5,1 s | tempo |
+| `lu_create_decomposition` | 512 | 2,8 s | tempo |
+| `matrix_determinant` | 512 | 2,8 s | tempo |
+| `matrix_inverse` | 256 | 1,5 s | tempo |
+
+Em todos esses tamanhos o resultado foi conferido contra uma implementação de
+referência independente e confere (erro relativo da ordem de `1e-15` para LU
+e inversa, zero para as operações exatas). O limite é de tempo e de memória,
+não de correção.
+
+**Limite de memória.** A biblioteca aloca uma matriz `n x n` como `n` vetores
+coluna, ou seja, `n` alocações separadas:
+
+| Alocação | Maior `n` | Tamanho |
+| --- | --- | --- |
+| 1 matriz | 16384 | 2,00 GB |
+| 3 matrizes (pior caso de `matrix_mul`) | 8192 | 1,50 GB |
+| 6 matrizes (pior caso de `matrix_inverse`) | 8192 | 3,00 GB |
+
+Quando a memória acaba, a biblioteca falha de forma graciosa: as funções
+devolvem `NULL` com `errno = EMATRIXALLOCATION`.
+
+**Limite numérico.** O determinante cresce exponencialmente com `n` e deixa
+de caber em um `double` (`|det| > 1.8e308`) a partir de **n = 162** para
+matrizes aleatórias desse tipo. Acima disso `matrix_determinant` devolve
+`inf`, que não é um erro reportado pela API, e sim um resultado inválido.
+
+### Regra prática
+
+| `n` | Comportamento |
+| --- | --- |
+| até 50 | instantâneo, incluindo `matrix_inverse` |
+| 50 a 500 | confortável para as operações cúbicas (segundos) |
+| 500 a 1000 | `matrix_mul`, LU, determinante e inversa levam de segundos a dezenas de segundos |
+| acima de 1000 | inviável para as operações cúbicas; as operações lineares e quadráticas continuam bem |
+
+Para uso recreativo, a faixa de 10 a 200 linhas cobre com folga o que se faz
+com álgebra linear na prática, e é onde a biblioteca se comporta melhor.
 
 ## Tipos
 
@@ -96,7 +203,9 @@ vetor nulo ou, no caso de `vector_norm_p`, quando `p` é zero
 | `matrix_print(m, label)` / `matrix_println(m, label)` | Imprime a matriz com um rótulo |
 
 `matrix_determinant` devolve `0.0` para matrizes singulares e `NAN` (com `errno`
-definido) para matriz nula, matriz não quadrada ou falha de alocação.
+definido) para matriz nula, matriz não quadrada ou falha de alocação. Para
+matrizes grandes o determinante pode estourar a faixa finita do `double` e o
+retorno é `inf` — ver [Limites de dimensão](#limites-de-dimensão).
 
 Toda função que retorna um novo `Vector*` ou `Matrix*` aloca memória, que deve ser liberada pelo chamador com `vector_destroy` ou `matrix_destroy`.
 
@@ -195,3 +304,7 @@ códigos abaixo:
 - Produto vetorial e normas entre vetores
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal
+- Reduzir o overhead das operações internas (validação de índice a cada
+  acesso e alocação por coluna), o que ampliaria os limites de dimensão
+  descritos em [Limites de dimensão](#limites-de-dimensão)
+
