@@ -23,6 +23,8 @@ double vector_norm_p(const Vector* a, unsigned int p);
 double vector_norm_inf(const Vector* a);
 double vector_norm(const Vector* a);
 
+Vector* vector_product(const Vector* a, const Vector* b);
+
 void vector_print(const Vector* v, const char* vector_label);
 void vector_println(const Vector* v, const char* vector_label);
 
