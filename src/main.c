@@ -706,6 +706,65 @@ void test_matrix_determinant() {
   matrix_destroy(d);
 }
 
+void test_matrix_remove_column_vector_at() {
+  printf("--- TEST: matrix_remove_column_vector_at ---\n");
+
+  double v1[] = {-3.0, 1.0, -2.0};
+  double v2[] = {2.0, 5.0, 1.5};
+  double v3[] = {3.0, 2.0, 2.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+  
+  Matrix* b = matrix_remove_column_vector_at(a, 1);
+  assert(b != NULL);
+  matrix_println(b, "B");
+
+  Matrix* c = matrix_remove_column_vector_at(a, 0);
+  assert(c != NULL);
+  matrix_println(c, "C");
+  
+  Matrix* d = matrix_remove_column_vector_at(a, 2);
+  assert(d != NULL);
+  matrix_println(d, "D");
+
+  // testa fora do range do index
+  Matrix* e = matrix_remove_column_vector_at(a, 4);
+  assert(e == NULL);
+
+  matrix_destroy(d);
+  matrix_destroy(c);
+  matrix_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_vector_product() {
+  printf("--- TEST: test_vector_product ---\n");
+  
+  unsigned int dim = 5;
+  double v1[5] = {-1.0, 1.0, 3.0, 0.0, -1.0};
+  double v2[5] = {1.0, -2.0, 1.0, -1.0, 0.0};
+  double v3[5] = {-2.0, -1.0, 0.0, 1.0, 1.0};
+  double v4[5] = {0.0, -1.0, 2.0, 1.0, -3.0};
+  Vector vectors[4] = {
+    { .dim = dim, .x = v1 },
+    { .dim = dim, .x = v2 },
+    { .dim = dim, .x = v3 },
+    { .dim = dim, .x = v4 }
+  };
+
+  Vector* v = vector_product(dim, vectors);
+  assert(v != NULL);
+
+  vector_destroy(v);
+}
+
 int main() {
   test_vector_create_empty();
   test_vector_create();
@@ -727,5 +786,7 @@ int main() {
   test_matrix_transpose();
   test_matrix_inverse();
   test_matrix_determinant();
+  test_matrix_remove_column_vector_at();
+  test_vector_product();
   return 0;
 }

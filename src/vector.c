@@ -1,4 +1,5 @@
 #include "vector.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -215,94 +216,84 @@ double vector_norm(const Vector* a) {
   return vector_norm_p(a, 2);
 }
 
-Vector* vector_product(const Vector* a, const Vector* b) {
-//Algoritmo "Produto_Vetorial_Dimensional_N"
-//// Descrição   : Calcula o vetor resultante (ortogonal) a partir de (n-1) vetores de dimensão n
-//// Vetores de entrada: M[1..n-1, 1..n]
-//// Vetor de saída: VetorResultante[1..n]
-//
-//Var
-//   n, i, j: inteiro
-//   M: vetor [1..20, 1..20] de real // Matriz para armazenar os n-1 vetores
-//   VetorResultante: vetor [1..20] de real
-//   SubMatriz: vetor [1..20, 1..20] de real
-//   detSub: real
-//
-//// Função auxiliar fictícia para calcular o determinante de uma matriz quadrada de ordem (n-1)
-//// Em um sistema real, esta função implementaria o método de Gauss ou Teorema de Laplace recursivo.
-//Funcao CalcularDeterminante(Mat: vetor [1..20, 1..20] de real; ordem: inteiro): real
-//Var
-//   // Variáveis de controle do determinante
-//Inicio
-//   // O cálculo real do determinante de ordem (n-1) entraria aqui.
-//   // Para n=3 (submatriz 2x2): retorna (Mat[1,1]*Mat[2,2] - Mat[1,2]*Mat[2,1])
-// FimFuncao
-//
-//Inicio
-//   Escreva("Digite a dimensão N do espaço (ex: 3, 4, 5): ")
-//   Leia(n)
-//   
-//   Se n < 2 Entao
-//      Escreval("A dimensão deve ser de pelo menos 2.")
-//      FimAlgoritmo
-//   FimSe
-//
-//   Escreval("Para o produto vetorial em ", n, " dimensões, você precisa fornecer ", n-1, " vetores.")
-//   
-//   // Leitura dos n-1 vetores
-//   Para i de 1 ate n-1 faca
-//      Escreval("--- Vetor ", i, " ---")
-//      Para j de 1 ate n faca
-//         Escreva("Componente ", j, ": ")
-//         Leia(M[i, j])
-//      FimPara
-//   FimPara
-//
-//   // Cálculo do "produto vetorial" via Cofatores da primeira linha imaginária
-//   Para j de 1 ate n faca
-//      // Monta a submatriz eliminando a coluna j
-//      ConstruirSubMatriz(M, SubMatriz, n, j)
-//      
-//      // Calcula o determinante da submatriz de ordem n-1
-//      detSub <- CalcularDeterminante(SubMatriz, n-1)
-//      
-//      // Aplica o sinal do cofator: (-1)^(1 + j) -> se j for par, inverte o sinal
-//      Se (1 + j) % 2 = 0 Entao
-//         VetorResultante[j] <- detSub
-//      Senao
-//         VetorResultante[j] <- -detSub
-//      FimSe
-//   FimPara
-//
-//   // Exibe o vetor ortogonal resultante
-//   Escreval("---------------------------------------")
-//   Escreva("Vetor Resultante (Produto Vetorial): [")
-//   Para j de 1 ate n faca
-//      Escreva(VetorResultante[j])
-//      Se j < n Entao
-//         Escreva(", ")
-//      FimSe
-//   FimPara
-//   Escreval("]")
-//
-//FimAlgoritmo
-//
-//// Procedimento para isolar a submatriz eliminando a coluna 'colunaExcluida'
-//Procedimento ConstruirSubMatriz(MatOrigem: vetor [1..20, 1..20] de real; Var MatDestino: vetor [1..20, 1..20] de real; dimn, colunaExcluida: inteiro)
-//Var
-//   i, j, colAtual: inteiro
-//Inicio
-//   Para i de 1 ate dimn-1 faca
-//      colAtual <- 1
-//      Para j de 1 ate dimn faca
-//         Se j <> colunaExcluida Entao
-//            MatDestino[i, colAtual] <- MatOrigem[i, j]
-//            colAtual <- colAtual + 1
-//         FimSe
-//      FimPara
-//   FimPara
-//FimProcedimento
+Vector* vector_product(unsigned int dim, const Vector vectors[]) {
+  if (dim < 2) {
+    errno = EINVALIDDIM;
+    return NULL;
+  }
 
+  // Vamos montar uma matriz com os vetores de entrada sendo que
+  //     |i   j   k  ... |
+  // M = |a1  a2  a3 ... |
+  //     |b1  b2  b3 ... |
+  
+  /* OPCAO 1
+  Matrix* m = matrix_create_empty(dim - 1, dim);
+  if (m == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  // temos que preencher a matriz com os vetores de entrada como vetores linha
+  for (i = 0; i < dim - 1; i++) {
+    Vector v = vectors[i];
+    for (j = 0; j < dim; j++) {
+      matrix_set(m, j, i, v.x[i]);
+    }
+  }
+  */
+  // OPCAO 2
+  Matrix* temp = matrix_create(dim, dim - 1, (Vector*)vectors);
+  if (temp == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  Matrix* aux = matrix_transpose(temp);
+  if (aux == NULL) {
+    matrix_destroy(temp);
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  // debug
+  double det = 0.00;
+  int sinal_cof = 1;
+  double* coords = (double*)calloc(dim, sizeof(double));
+  if (coords == NULL) {
+    matrix_destroy(aux);
+    matrix_destroy(temp);
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < dim; i++) {
+    // monta submatriz eliminando a coluna i
+    Matrix* submatrix = matrix_remove_column_vector_at(aux, i);
+    if (submatrix == NULL) {
+      free(coords);
+      matrix_destroy(aux);
+      matrix_destroy(temp);
+      errno = EMATRIXALLOCATION;
+      return NULL;
+    }
+    matrix_println(submatrix, "m");
+    // calcular determinante da submatriz
+    det = matrix_determinant(submatrix);
+    sinal_cof = ((i + 1) + 1 % 2 == 0) ? 1 : -1;
+    coords[i] = sinal_cof * det;
+    matrix_destroy(submatrix);
+  }
+
+  matrix_destroy(aux);
+  matrix_destroy(temp);
+
+  Vector* result = vector_create(dim, coords);
+  if (result == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  vector_println(result, "a x b");
+  return result;
 }
 
 void vector_print(const Vector* v, const char* vector_label) {

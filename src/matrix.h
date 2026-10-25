@@ -52,6 +52,7 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j);
  * O buffer anterior da coluna e liberado internamente.
  */
 void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x);
+Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_index);
 
 /**
  * Operações

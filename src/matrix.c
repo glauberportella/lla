@@ -225,6 +225,32 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
   return column_vector->x[i];
 }
 
+Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_index) {
+  unsigned int i, j;
+
+  if (column_index > m->ncols - 1) {
+    errno = EMATRIXINVALIDCOLINDEX;
+    return NULL;
+  }
+
+  Matrix* n = matrix_create_empty(m->nlins, m->ncols - 1);
+  if (n == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  for (i = 0, j = 0; i < m->ncols; i++) {
+     if (i == column_index) {
+       j = i;
+       continue;
+     }
+     memcpy(n->columns[j].x, m->columns[i].x, m->nlins * sizeof(double));
+     j++;
+  }
+
+  return n;
+}
+
 /**
  * Substitui o vetor coluna de indice i pelo vetor x.
  *
