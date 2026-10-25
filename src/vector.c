@@ -254,7 +254,6 @@ Vector* vector_product(unsigned int dim, const Vector vectors[]) {
     return NULL;
   }
 
-  // debug
   double det = 0.00;
   int sinal_cof = 1;
   double* coords = (double*)calloc(dim, sizeof(double));
@@ -275,10 +274,9 @@ Vector* vector_product(unsigned int dim, const Vector vectors[]) {
       errno = EMATRIXALLOCATION;
       return NULL;
     }
-    matrix_println(submatrix, "m");
     // calcular determinante da submatriz
     det = matrix_determinant(submatrix);
-    sinal_cof = ((i + 1) + 1 % 2 == 0) ? 1 : -1;
+    sinal_cof = (i % 2 == 0) ? 1 : -1;
     coords[i] = sinal_cof * det;
     matrix_destroy(submatrix);
   }
@@ -287,12 +285,12 @@ Vector* vector_product(unsigned int dim, const Vector vectors[]) {
   matrix_destroy(temp);
 
   Vector* result = vector_create(dim, coords);
+  free(coords);
   if (result == NULL) {
     errno = EVECTORALLOCATION;
     return NULL;
   }
 
-  vector_println(result, "a x b");
   return result;
 }
 
