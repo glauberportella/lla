@@ -173,6 +173,7 @@ typedef struct matrix_rn_t {
 | `vector_norm_p(a, p)` | Retorna a norma `p` de `a`: `(Σ |xᵢ|^p)^(1/p)` |
 | `vector_norm_inf(a)` | Retorna a norma infinita de `a`: `max(|xᵢ|)` |
 | `vector_norm(a)` | Retorna a norma euclidiana de `a`: `sqrt(Σ xᵢ²)` |
+| `vector_product(dim, vectors)` | Calcula o produto vetorial generalizado de `dim - 1` vetores de dimensão `dim` |
 | `vector_print(v, label)` / `vector_println(v, label)` | Imprime o vetor no formato `(x1, x2, ...)`, prefixado com `label = ` quando o rótulo é informado |
 
 `vector_inner_product` devolve `NAN` (com `errno` definido) quando os vetores
@@ -182,6 +183,55 @@ As funções de norma devolvem `NAN` (com `errno` definido) quando recebem um
 vetor nulo ou, no caso de `vector_norm_p`, quando `p` é zero
 (`errno = EINVALIDP`). `vector_norm` é equivalente a `vector_norm_p` com
 `p = 2`.
+
+#### Produto vetorial generalizado
+
+`vector_product(dim, vectors)` recebe `dim - 1` vetores, todos com dimensão
+`dim`, e devolve um novo vetor de dimensão `dim`. O vetor resultante é
+ortogonal a todos os vetores de entrada:
+
+```
+resultado · entrada[j] = 0, para todo j
+```
+
+A implementação monta uma matriz `M` cujas linhas são os vetores de entrada e
+calcula a primeira linha de cofatores:
+
+```
+resultado[i] = (-1)^i · det(M sem a coluna i),  i = 0, ..., dim - 1
+```
+
+Esse é o produto vetorial generalizado: em R³, com dois vetores de entrada, o
+resultado coincide com o produto vetorial tradicional `A x B`. A orientação do
+resultado segue a convenção dos determinantes; trocar a ordem de duas entradas
+inverte o sinal do resultado.
+
+O vetor devolvido é alocado pela biblioteca e deve ser liberado com
+`vector_destroy`. Se `dim < 2`, a função devolve `NULL` e define
+`errno = EINVALIDDIM`. Entradas inválidas ou falhas de alocação também podem
+fazer a função devolver `NULL` com `errno` definido.
+
+Exemplo em R³:
+
+```c
+double a_coords[] = { 1.0, 0.0, 0.0 };
+double b_coords[] = { 0.0, 1.0, 0.0 };
+Vector entradas[] = {
+  { .dim = 3, .x = a_coords },
+  { .dim = 3, .x = b_coords },
+};
+
+Vector* resultado = vector_product(3, entradas);
+if (resultado == NULL) {
+  return 1;
+}
+
+vector_println(&entradas[0], "A");
+vector_println(&entradas[1], "B");
+vector_println(resultado, "A x B");
+
+vector_destroy(resultado);
+```
 
 ### Matrizes (`matrix.h`)
 
@@ -301,7 +351,6 @@ códigos abaixo:
 ## Próximos passos
 
 - Resolução de sistemas lineares (eliminação de Gauss)
-- Produto vetorial e normas entre vetores
 - Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal
 - Reduzir o overhead das operações internas (validação de índice a cada

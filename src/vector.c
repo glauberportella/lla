@@ -1,4 +1,5 @@
 #include "vector.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -213,6 +214,84 @@ double vector_norm_inf(const Vector* a) {
 
 double vector_norm(const Vector* a) {
   return vector_norm_p(a, 2);
+}
+
+Vector* vector_product(unsigned int dim, const Vector vectors[]) {
+  if (dim < 2) {
+    errno = EINVALIDDIM;
+    return NULL;
+  }
+
+  // Vamos montar uma matriz com os vetores de entrada sendo que
+  //     |i   j   k  ... |
+  // M = |a1  a2  a3 ... |
+  //     |b1  b2  b3 ... |
+  
+  /* OPCAO 1
+  Matrix* m = matrix_create_empty(dim - 1, dim);
+  if (m == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  // temos que preencher a matriz com os vetores de entrada como vetores linha
+  for (i = 0; i < dim - 1; i++) {
+    Vector v = vectors[i];
+    for (j = 0; j < dim; j++) {
+      matrix_set(m, j, i, v.x[i]);
+    }
+  }
+  */
+  // OPCAO 2
+  Matrix* temp = matrix_create(dim, dim - 1, (Vector*)vectors);
+  if (temp == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  Matrix* aux = matrix_transpose(temp);
+  if (aux == NULL) {
+    matrix_destroy(temp);
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  double det = 0.00;
+  int sinal_cof = 1;
+  double* coords = (double*)calloc(dim, sizeof(double));
+  if (coords == NULL) {
+    matrix_destroy(aux);
+    matrix_destroy(temp);
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < dim; i++) {
+    // monta submatriz eliminando a coluna i
+    Matrix* submatrix = matrix_remove_column_vector_at(aux, i);
+    if (submatrix == NULL) {
+      free(coords);
+      matrix_destroy(aux);
+      matrix_destroy(temp);
+      errno = EMATRIXALLOCATION;
+      return NULL;
+    }
+    // calcular determinante da submatriz
+    det = matrix_determinant(submatrix);
+    sinal_cof = (i % 2 == 0) ? 1 : -1;
+    coords[i] = sinal_cof * det;
+    matrix_destroy(submatrix);
+  }
+
+  matrix_destroy(aux);
+  matrix_destroy(temp);
+
+  Vector* result = vector_create(dim, coords);
+  free(coords);
+  if (result == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  return result;
 }
 
 void vector_print(const Vector* v, const char* vector_label) {

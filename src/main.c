@@ -706,6 +706,129 @@ void test_matrix_determinant() {
   matrix_destroy(d);
 }
 
+void test_matrix_remove_column_vector_at() {
+  printf("--- TEST: matrix_remove_column_vector_at ---\n");
+
+  double v1[] = {-3.0, 1.0, -2.0};
+  double v2[] = {2.0, 5.0, 1.5};
+  double v3[] = {3.0, 2.0, 2.0};
+  Vector vetor_colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+  
+  Matrix* a = matrix_create(3, 3, vetor_colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+  
+  Matrix* b = matrix_remove_column_vector_at(a, 1);
+  assert(b != NULL);
+  matrix_println(b, "B");
+
+  Matrix* c = matrix_remove_column_vector_at(a, 0);
+  assert(c != NULL);
+  matrix_println(c, "C");
+  
+  Matrix* d = matrix_remove_column_vector_at(a, 2);
+  assert(d != NULL);
+  matrix_println(d, "D");
+
+  // testa fora do range do index
+  Matrix* e = matrix_remove_column_vector_at(a, 4);
+  assert(e == NULL);
+
+  matrix_destroy(d);
+  matrix_destroy(c);
+  matrix_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_vector_product() {
+  printf("--- TEST: test_vector_product ---\n");
+
+  const double epsilon = 1e-9;
+
+  printf("--- R2 ---\n");
+  double v2d[] = {3.0, 4.0};
+  Vector vectors_2d[] = {
+    { .dim = 2, .x = v2d }
+  };
+  const double expected_2d[] = {4.0, -3.0};
+  vector_println(&vectors_2d[0], "A");
+
+  Vector* product_2d = vector_product(2, vectors_2d);
+  assert(product_2d != NULL);
+  assert(product_2d->dim == 2);
+
+  for (unsigned int i = 0; i < 2; i++) {
+    assert(fabs(product_2d->x[i] - expected_2d[i]) < epsilon);
+  }
+  assert(fabs(vector_inner_product(product_2d, &vectors_2d[0])) < epsilon);
+  vector_println(product_2d, "Resultado");
+
+  vector_destroy(product_2d);
+
+  printf("--- R3 ---\n");
+  double v3d_1[] = {1.0, 0.0, 0.0};
+  double v3d_2[] = {0.0, 1.0, 0.0};
+  Vector vectors_3d[] = {
+    { .dim = 3, .x = v3d_1 },
+    { .dim = 3, .x = v3d_2 }
+  };
+  const double expected_3d[] = {0.0, 0.0, 1.0};
+  vector_println(&vectors_3d[0], "A");
+  vector_println(&vectors_3d[1], "B");
+
+  Vector* product_3d = vector_product(3, vectors_3d);
+  assert(product_3d != NULL);
+  assert(product_3d->dim == 3);
+
+  for (unsigned int i = 0; i < 3; i++) {
+    assert(fabs(product_3d->x[i] - expected_3d[i]) < epsilon);
+  }
+  assert(fabs(vector_inner_product(product_3d, &vectors_3d[0])) < epsilon);
+  assert(fabs(vector_inner_product(product_3d, &vectors_3d[1])) < epsilon);
+  vector_println(product_3d, "A x B");
+
+  vector_destroy(product_3d);
+
+  printf("--- R5 ---\n");
+  double v5d_1[] = {-1.0, 1.0, 3.0, 0.0, -1.0};
+  double v5d_2[] = {1.0, -2.0, 1.0, -1.0, 0.0};
+  double v5d_3[] = {-2.0, -1.0, 0.0, 1.0, 1.0};
+  double v5d_4[] = {0.0, -1.0, 2.0, 1.0, -3.0};
+  Vector vectors_5d[] = {
+    { .dim = 5, .x = v5d_1 },
+    { .dim = 5, .x = v5d_2 },
+    { .dim = 5, .x = v5d_3 },
+    { .dim = 5, .x = v5d_4 }
+  };
+  const double expected_5d[] = {-36.0, -4.0, -20.0, -48.0, -28.0};
+  vector_println(&vectors_5d[0], "A");
+  vector_println(&vectors_5d[1], "B");
+  vector_println(&vectors_5d[2], "C");
+  vector_println(&vectors_5d[3], "D");
+
+  Vector* product_5d = vector_product(5, vectors_5d);
+  assert(product_5d != NULL);
+  assert(product_5d->dim == 5);
+
+  for (unsigned int i = 0; i < 5; i++) {
+    assert(fabs(product_5d->x[i] - expected_5d[i]) < epsilon);
+  }
+  assert(fabs(vector_inner_product(product_5d, &vectors_5d[0])) < epsilon);
+  assert(fabs(vector_inner_product(product_5d, &vectors_5d[1])) < epsilon);
+  assert(fabs(vector_inner_product(product_5d, &vectors_5d[2])) < epsilon);
+  assert(fabs(vector_inner_product(product_5d, &vectors_5d[3])) < epsilon);
+  vector_println(product_5d, "A x B x C x D");
+
+  vector_destroy(product_5d);
+
+  assert(vector_product(1, NULL) == NULL);
+  assert(errno == EINVALIDDIM);
+}
+
 int main() {
   test_vector_create_empty();
   test_vector_create();
@@ -727,5 +850,7 @@ int main() {
   test_matrix_transpose();
   test_matrix_inverse();
   test_matrix_determinant();
+  test_matrix_remove_column_vector_at();
+  test_vector_product();
   return 0;
 }
