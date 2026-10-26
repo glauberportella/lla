@@ -17,6 +17,7 @@ Por ser um projeto recreativo, a biblioteca prioriza clareza sobre desempenho br
     ├── lu.h / lu.c           # decomposição LU com pivoteamento parcial
     ├── svd.h / svd.c         # decomposição em valores singulares
     ├── lsystem.h / lsystem.c # resolução de sistemas lineares (LU e mínimos quadrados via SVD)
+    ├── examples               # exemplos de uso (ver examples/README.md)
     ├── main.c                # testes
     ├── bech.c                # benchmark de performance
     └── lim.c                 # limites de dimensão
