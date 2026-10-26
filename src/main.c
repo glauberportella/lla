@@ -6,6 +6,7 @@
 #include "matrix.h"
 #include "lu.h"
 #include "svd.h"
+#include "lsystem.h"
 
 void test_vector_create_empty() {
   printf("--- TEST: vector_create_empty ---\n");
@@ -1099,6 +1100,189 @@ void test_svd_etapas() {
   matrix_destroy(a);
 }
 
+void test_matrix_trace() {
+  printf("--- TEST: matrix_trace ---\n");
+
+  double v1[] = {3.0, 1.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  assert(fabs(matrix_trace(a) - 7.0) < 1e-9);
+
+  Matrix* b = matrix_create_empty(2, 3);
+  assert(b != NULL);
+  assert(isnan(matrix_trace(b)));
+  assert(errno == EMATRIXINVALIDDIM);
+  matrix_destroy(b);
+
+  assert(isnan(matrix_trace(NULL)));
+  assert(errno == EMATRIXNULL);
+
+  matrix_destroy(a);
+}
+
+void test_matrix_rank() {
+  printf("--- TEST: matrix_rank ---\n");
+
+  double v1[] = {1.0, 2.0, 3.0};
+  double v2[] = {2.0, 4.0, 6.0};
+  double v3[] = {0.0, 1.0, 0.0};
+  Vector colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(3, 3, colunas);
+  assert(a != NULL);
+  assert(matrix_rank(a) == 2);
+  matrix_destroy(a);
+
+  Matrix* b = matrix_create_empty(3, 3);
+  assert(b != NULL);
+  assert(matrix_rank(b) == 0);
+  matrix_destroy(b);
+
+  assert(matrix_rank(NULL) == (unsigned int)-1);
+  assert(errno == EMATRIXNULL);
+}
+
+void test_lsystem_sistema_quadrado() {
+  printf("--- TEST: lsystem_sistema_quadrado ---\n");
+
+  double v1[] = {3.0, 2.0};
+  double v2[] = {-1.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  double bx[] = {4.0, 26.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+  assert(x->dim == 2);
+  assert(fabs(x->x[0] - 3.0) < 1e-9);
+  assert(fabs(x->x[1] - 5.0) < 1e-9);
+
+  // verificacao: A * x = b
+  Vector* ax = matrix_mul_vector(a, x);
+  assert(ax != NULL);
+  assert(fabs(ax->x[0] - bx[0]) < 1e-9);
+  assert(fabs(ax->x[1] - bx[1]) < 1e-9);
+
+  vector_destroy(ax);
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_sistema_singular() {
+  printf("--- TEST: lsystem_sistema_singular ---\n");
+
+  double v1[] = {1.0, 2.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  double bx[] = {3.0, 6.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+
+  // solucao de norma minima dos minimos quadrados
+  double rec1 = 0.0;
+  double rec2 = 0.0;
+  for (unsigned int i = 0; i < 2; i++) {
+    rec1 += a->columns[i].x[0] * x->x[i];
+    rec2 += a->columns[i].x[1] * x->x[i];
+  }
+  assert(fabs(rec1 - 3.0) < 1e-9);
+  assert(fabs(rec2 - 6.0) < 1e-9);
+
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_sistema_retangular() {
+  printf("--- TEST: lsystem_sistema_retangular ---\n");
+
+  double v1[] = {1.0, 1.0};
+  double v2[] = {0.0, 1.0};
+  double v3[] = {2.0, 0.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+    { .dim = 2, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(2, 3, colunas);
+  assert(a != NULL);
+
+  double bx[] = {2.0, 1.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+  assert(x->dim == 3);
+
+  // A^T x = b x? x = A^T(A A^T)^-1 b com norma minima
+  Vector* ax = matrix_mul_vector(a, x);
+  assert(ax != NULL);
+  assert(fabs(ax->x[0] - 2.0) < 1e-9);
+  assert(fabs(ax->x[1] - 1.0) < 1e-9);
+  vector_destroy(ax);
+
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_erros() {
+  printf("--- TEST: lsystem_erros ---\n");
+
+  double v1[] = {1.0, 1.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+  };
+
+  assert(lsystem_solve(NULL, NULL) == NULL);
+  assert(errno == ELSYSTEMNULL);
+
+  Matrix* a = matrix_create(2, 1, colunas);
+  assert(a != NULL);
+
+  double bx[] = {1.0, 2.0, 3.0};
+  Vector* b = vector_create(3, bx);
+  assert(b != NULL);
+
+  assert(lsystem_solve(a, b) == NULL);
+  assert(errno == ELSYSTEMINVALIDDIM);
+
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
 void test_svd_erros() {
   printf("--- TEST: svd_erros ---\n");
 
@@ -1188,5 +1372,11 @@ int main() {
   test_svd_matriz_nao_alterada();
   test_svd_etapas();
   test_svd_erros();
+  test_matrix_trace();
+  test_matrix_rank();
+  test_lsystem_sistema_quadrado();
+  test_lsystem_sistema_singular();
+  test_lsystem_sistema_retangular();
+  test_lsystem_erros();
   return 0;
 }

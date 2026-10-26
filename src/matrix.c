@@ -1,5 +1,6 @@
 #include "matrix.h"
 #include "lu.h"
+#include "svd.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -7,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <float.h>
 
 Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
   if (nlins == 0 || ncols == 0) {
@@ -721,6 +723,55 @@ double matrix_determinant(const Matrix* m) {
   }
 
   return sign * product;
+}
+
+double matrix_trace(const Matrix* m) {
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return NAN;
+  }
+
+  if (m->nlins != m->ncols) {
+    errno = EMATRIXINVALIDDIM;
+    return NAN;
+  }
+
+  double trace = 0.0;
+  for (unsigned int i = 0; i < m->nlins; i++) {
+    trace += matrix_get(m, i, i);
+  }
+
+  return trace;
+}
+
+unsigned int matrix_rank(const Matrix* m) {
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return (unsigned int)-1;
+  }
+
+  if (m->nlins == 0 || m->ncols == 0) {
+    errno = EMATRIXINVALIDDIM;
+    return (unsigned int)-1;
+  }
+
+  SVDResult* r = svd_golub_reinsch(m);
+  if (r == NULL) {
+    return (unsigned int)-1;
+  }
+
+  const double tol = (double)(m->nlins > m->ncols ? m->nlins : m->ncols)
+                     * r->sigma->x[0] * DBL_EPSILON;
+
+  unsigned int rank = 0;
+  for (unsigned int j = 0; j < r->sigma->dim; j++) {
+    if (r->sigma->x[j] > tol) {
+      rank++;
+    }
+  }
+
+  svd_destroy(r);
+  return rank;
 }
 
 void matrix_print(const Matrix* m, const char* matrix_label) {

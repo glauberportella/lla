@@ -96,6 +96,24 @@ Matrix* matrix_inverse(const Matrix* m);
 double matrix_determinant(const Matrix* m);
 
 /**
+ * @brief matrix_trace(const Matrix*)
+ * Soma da diagonal principal da matriz quadrada m.
+ *
+ * @return double o traco, ou NAN com errno definido (matriz nula ou nao quadrada).
+ */
+double matrix_trace(const Matrix* m);
+
+/**
+ * @brief matrix_rank(const Matrix*)
+ * Calcula o posto da matriz a via decomposicao em valores singulares: o
+ * numero de valores singulares acima de eps * max(m, n) * sigma_max.
+ *
+ * @return unsigned int o posto, ou (unsigned int)-1 com errno definido
+ * (matriz nula ou sem linhas/colunas).
+ */
+unsigned int matrix_rank(const Matrix* m);
+
+/**
  * Saída
  */
 void matrix_print(const Matrix* m, const char* matrix_label);
