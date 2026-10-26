@@ -22,6 +22,8 @@ typedef struct matrix_rn_t {
 
 Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols);
 Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]);
+Matrix* matrix_create_identity(unsigned int m, unsigned int n);
+
 void matrix_destroy(Matrix* m);
 
 /**
@@ -33,7 +35,7 @@ void matrix_destroy(Matrix* m);
  */
 int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned int j);
 Vector* matrix_get_line_vectors(const Matrix* a);
-
+Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i);
 
 /**
  * @brief matrix_set(Matrix*, const unsigned int, const unsigned int, double)

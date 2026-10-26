@@ -98,6 +98,22 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
   return m;
 }
 
+Matrix* matrix_create_identity(unsigned int m, unsigned int n) {
+  Matrix* a = matrix_create_empty(m, n);
+  if (a == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  for (unsigned int i = 0; i < m; i++) {
+    for (unsigned int j = 0; j < n; j++) {
+      if (i == j) {
+        matrix_set(a, i, j, 1.0);
+      }
+    }
+  }
+  return a;
+}
+
 void matrix_destroy(Matrix* m) {
   if (m != NULL) {
     if (m->columns != NULL) {
@@ -168,6 +184,14 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
   }
 
   return line_vectors;
+}
+
+Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i) {
+  if (a == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+  return &a->columns[i];
 }
 
 /**
