@@ -420,6 +420,34 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m) {
   return c;
 }
 
+Vector* matrix_mul_vector(const Matrix* m, const Vector* v) {
+  if (m == NULL || m->columns == NULL || v == NULL || v->x == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+
+  if (m->ncols != v->dim) {
+    errno = EMATRIXINVALIDMUL;
+    return NULL;
+  }
+
+  Vector* r = vector_create_empty(m->nlins);
+  if (r == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < m->nlins; i++) {
+    double sum = 0.0;
+    for (unsigned int j = 0; j < m->ncols; j++) {
+      sum += m->columns[j].x[i] * v->x[j];
+    }
+    r->x[i] = sum;
+  }
+
+  return r;
+}
+
 Matrix* matrix_transpose(const Matrix* m) {
   if (m == NULL) {
     errno = EMATRIXNULL;

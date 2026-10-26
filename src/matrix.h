@@ -70,6 +70,15 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m);
 Matrix* matrix_transpose(const Matrix* m);
 
 /**
+ * @brief matrix_mul_vector(const Matrix*, const Vector*)
+ * Retorna o produto A * x, com A having m linhas e n colunas e x com n
+ * coordenadas.
+ *
+ * @return Vector* o resultado, com m coordenadas, ou NULL com errno definido.
+ */
+Vector* matrix_mul_vector(const Matrix* m, const Vector* v);
+
+/**
  * @brief matrix_inverse(const Matrix*)
  * Retorna a inversa da matriz quadrada m, resolvendo A * X = I via decomposicao LU.
  *

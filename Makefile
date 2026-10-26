@@ -2,7 +2,7 @@ CC      ?= gcc
 CFLAGS  ?= -g -Wall -Wextra -Werror -Isrc
 LDLIBS  ?= -lm
 
-LIB_SRC = src/vector.c src/matrix.c src/lu.c
+LIB_SRC = src/vector.c src/matrix.c src/lu.c src/svd.c
 
 .PHONY: all build bench lim run bench-run lim-run clean
 

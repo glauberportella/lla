@@ -1,530 +1,645 @@
 #include "svd.h"
-#include "matrix.h"
-#include "vector.h"
+
 #include <errno.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <math.h>
+#include <string.h>
+
+#define SVD_TOLERANCE 1e-14
 
 int lla_signal(double n) {
   return n >= 0 ? 1 : -1;
 }
 
-double* givens_rotation(double f, double g) {
-  double c, s;
-  
-  if (g == 0) {
-    c = 1.0;
-    s = 0.0;
-  } else if (fabs(g) > fabs(f)) {
-    double cotan = f / g;
-    s = 1 / sqrt(1 + pow(cotan, 2.0));
-    c = s * cotan;
-  } else {
-    double tan = g / f;
-    c = 1 / sqrt(1 + pow(tan, 2));
-    s = c * tan;
+void svd_givens_rotation(double f, double g, double* c, double* s) {
+  if (c == NULL || s == NULL) {
+    errno = ESVDNULL;
+    return;
   }
-  
-  double ret[2] = {c, s};
 
-  return ret;
+  const double norm = sqrt(f * f + g * g);
+  if (norm == 0.0) {
+    *c = 1.0;
+    *s = 0.0;
+    return;
+  }
+
+  *c = f / norm;
+  *s = g / norm;
 }
 
-SVDPosProcResult* svd_golub_reinsch(Matrix* a) {
-  HouseholderBidiagResult* hbdr = svd_householder_bidiag(a);
-  QRBidiagResult* bdr = svd_qr_bidiag_iter(hbdr);
-  SVDPosProcResult* ppr = svd_pos_proc(bdr);
-
-  return ppr;
+static double svd_dot(const double* a, const double* b, unsigned int n) {
+  double sum = 0.0;
+  for (unsigned int i = 0; i < n; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
 }
 
-HouseholderBidiagResult* svd_householder_bidiag(Matrix* a) {
-  unsigned int m = a->nlins;
-  unsigned int n = a->ncols;
-  
-  Matrix* U = matrix_create_identity(m, m);
-  if (U == NULL) {
-    errno = EMATRIXALLOCATION;
+/**
+ * Monta o vetor de Householder v = x - alpha * e1 normalizado.
+ *
+ * O vetor e escrito em v (que pode ser o proprio x) e alpha (o novo valor
+ * da diagonal) e devolvido. Retorna 0.0 quando o refletor e degenerado.
+ */
+static double svd_householder_vector(Vector* v, const double* x, unsigned int len) {
+  const double norm_x = sqrt(svd_dot(x, x, len));
+  if (norm_x == 0.0) {
+    return 0.0;
+  }
+
+  const double alpha = -lla_signal(x[0]) * norm_x;
+
+  for (unsigned int i = 0; i < len; i++) {
+    v->x[i] = x[i];
+  }
+  v->x[0] -= alpha;
+
+  const double norm_v = sqrt(svd_dot(v->x, v->x, len));
+  if (norm_v == 0.0) {
+    return 0.0;
+  }
+
+  for (unsigned int i = 0; i < len; i++) {
+    v->x[i] /= norm_v;
+  }
+
+  return alpha;
+}
+
+/**
+ * Aplica o refletor (I - 2 v v^T) as linhas k..m-1 de b e acumula o mesmo
+ * refletor em u (u <- u * (I - 2 v v^T)).
+ *
+ * O produto v v^T nunca e materializado: cada coluna usa o produto interno
+ * direto com v, o que torna a operacao O(m * n) e sem alocacoes.
+ */
+static void svd_apply_reflector_left(Matrix* b, Matrix* u, const Vector* v, unsigned int k) {
+  const unsigned int m = b->nlins;
+  const unsigned int n = b->ncols;
+
+  for (unsigned int j = k; j < n; j++) {
+    double* col = b->columns[j].x;
+    const double dot = 2.0 * svd_dot(v->x, col + k, m - k);
+    for (unsigned int i = k; i < m; i++) {
+      col[i] -= v->x[i - k] * dot;
+    }
+  }
+
+  const unsigned int ucols = u->ncols;
+  for (unsigned int i = 0; i < m; i++) {
+    double dot = 0.0;
+    for (unsigned int l = k; l < ucols; l++) {
+      dot += u->columns[l].x[i] * v->x[l - k];
+    }
+    dot *= 2.0;
+    for (unsigned int j = k; j < ucols; j++) {
+      u->columns[j].x[i] -= dot * v->x[j - k];
+    }
+  }
+}
+
+/**
+ * Aplica o refletor (I - 2 v v^T) as colunas k+1..n-1 de b e acumula o
+ * mesmo refletor em v_mat (v_mat <- v_mat * (I - 2 v v^T)).
+ *
+ * O produto v v^T nunca e materializado: cada linha usa o produto interno
+ * direto com v, o que torna a operacao O(m * n) e sem alocacoes.
+ */
+static void svd_apply_reflector_right(Matrix* b, Matrix* v_mat, const Vector* v, unsigned int k) {
+  const unsigned int m = b->nlins;
+  const unsigned int n = b->ncols;
+
+  for (unsigned int i = 0; i < m; i++) {
+    double dot = 0.0;
+    for (unsigned int l = k + 1; l < n; l++) {
+      dot += b->columns[l].x[i] * v->x[l - k - 1];
+    }
+    dot *= 2.0;
+    for (unsigned int j = k + 1; j < n; j++) {
+      b->columns[j].x[i] -= dot * v->x[j - k - 1];
+    }
+  }
+
+  for (unsigned int i = 0; i < v_mat->nlins; i++) {
+    double dot = 0.0;
+    for (unsigned int l = k + 1; l < n; l++) {
+      dot += v->x[l - k - 1] * v_mat->columns[l].x[i];
+    }
+    dot *= 2.0;
+    for (unsigned int j = k + 1; j < n; j++) {
+      v_mat->columns[j].x[i] -= dot * v->x[j - k - 1];
+    }
+  }
+}
+
+/**
+ * Rotacao a direita: v <- v * M, com M = [[c, s], [-s, c]] nas colunas p,p+1.
+ */
+static void svd_rotate_columns(Matrix* v, unsigned int p, double c, double s) {
+  double* col_p = v->columns[p].x;
+  double* col_p1 = v->columns[p + 1].x;
+
+  for (unsigned int i = 0; i < v->nlins; i++) {
+    const double vp = col_p[i];
+    const double vp1 = col_p1[i];
+    col_p[i] = c * vp - s * vp1;
+    col_p1[i] = s * vp + c * vp1;
+  }
+}
+
+/**
+ * Rotacao a esquerda: u <- u * G, com G = [[c, s], [-s, c]] nas colunas p,p+1.
+ */
+static void svd_rotate_rows(Matrix* u, unsigned int p, double c, double s) {
+  double* col_p = u->columns[p].x;
+  double* col_p1 = u->columns[p + 1].x;
+
+  for (unsigned int i = 0; i < u->nlins; i++) {
+    const double up = col_p[i];
+    const double up1 = col_p1[i];
+    col_p[i] = c * up - s * up1;
+    col_p1[i] = s * up + c * up1;
+  }
+}
+
+static void svd_swap_columns(Matrix* m, unsigned int i, unsigned int j) {
+  double* col_i = m->columns[i].x;
+  double* col_j = m->columns[j].x;
+
+  for (unsigned int l = 0; l < m->nlins; l++) {
+    const double aux = col_i[l];
+    col_i[l] = col_j[l];
+    col_j[l] = aux;
+  }
+}
+
+/**
+ * Copia as ncols primeiras colunas de m.
+ */
+static Matrix* svd_trim_columns(const Matrix* m, unsigned int ncols) {
+  Matrix* t = matrix_create_empty(m->nlins, ncols);
+  if (t == NULL) {
+    errno = ESVDALLOCATION;
     return NULL;
   }
 
-  Matrix* V = matrix_create_identity(n, n);
-  if (V == NULL) {
-    matrix_destroy(U);
-    errno = EMATRIXALLOCATION;
+  for (unsigned int j = 0; j < ncols; j++) {
+    memcpy(t->columns[j].x, m->columns[j].x, m->nlins * sizeof(double));
+  }
+
+  return t;
+}
+
+HouseholderBidiagResult* svd_householder_bidiag(const Matrix* a) {
+  if (a == NULL) {
+    errno = ESVDNULL;
+    return NULL;
+  }
+
+  const unsigned int m = a->nlins;
+  const unsigned int n = a->ncols;
+
+  if (m == 0 || n == 0) {
+    errno = ESVDINVALIDDIM;
+    return NULL;
+  }
+
+  Matrix* b = matrix_create(m, n, a->columns);
+  if (b == NULL) {
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  Matrix* u = matrix_create_identity(m, m);
+  if (u == NULL) {
+    matrix_destroy(b);
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  Matrix* v = matrix_create_identity(n, n);
+  if (v == NULL) {
+    matrix_destroy(u);
+    matrix_destroy(b);
+    errno = ESVDALLOCATION;
     return NULL;
   }
 
   Vector* d = vector_create_empty(n);
   if (d == NULL) {
-    matrix_destroy(V);
-    matrix_destroy(U);
-    errno = EVECTORALLOCATION;
+    matrix_destroy(v);
+    matrix_destroy(u);
+    matrix_destroy(b);
+    errno = ESVDALLOCATION;
     return NULL;
   }
-  
-  Vector* e = vector_create_empty(n - 1);
+
+  Vector* e = vector_create_empty(n > 1 ? n - 1 : 1);
   if (e == NULL) {
     vector_destroy(d);
-    matrix_destroy(V);
-    matrix_destroy(U);
-    errno = EVECTORALLOCATION;
+    matrix_destroy(v);
+    matrix_destroy(u);
+    matrix_destroy(b);
+    errno = ESVDALLOCATION;
     return NULL;
   }
 
-  unsigned int k;
-  
-  // vetor de Householder
-  Vector* v;
+  Vector* reflector = vector_create_empty(m > n ? m : n);
+  if (reflector == NULL) {
+    vector_destroy(e);
+    vector_destroy(d);
+    matrix_destroy(v);
+    matrix_destroy(u);
+    matrix_destroy(b);
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
 
-  for (k = 0; k < n - 1; k++) {
-    // --- 1. Aniquilar elementos abaixo de A[k,k] (Coluna) ---
-    Vector* vector_x = matrix_get_vector_column_at(a, k);
-    if (vector_x == NULL) {
-      vector_destroy(e);
-      vector_destroy(d);
-      matrix_destroy(V);
-      matrix_destroy(U);
-      return NULL;
+  const unsigned int steps = (m < n) ? m : n;
+
+  for (unsigned int k = 0; k < steps; k++) {
+    if (k + 1 < m) {
+      const double alpha = svd_householder_vector(reflector, b->columns[k].x + k, m - k);
+      if (alpha != 0.0) {
+        svd_apply_reflector_left(b, u, reflector, k);
+        b->columns[k].x[k] = alpha;
+      }
     }
-    double norm_x = vector_norm(vector_x);
-    if (norm_x > 0) {
-      // PONTO CRÍTICO 3: Evitar cancelamento catastrófico no sinal
-      int signal = vector_x->x[0] >= 0 ? 1 : -1;
-      double alpha = -signal * norm_x;
-      // Construir vetor de Householder v
-      v = vector_copy(vector_x);
-      v->x[0] = v->x[0] - alpha;
-      double norm_v = vector_norm(v);
-      if (norm_v > 0) {
-        // normaliza vetor refletor
-        v = vector_mul(1 / norm_v, v);
-        // para fazer vv^T vamos transformar em matriz linha e matriz coluna
-        Vector* mcv_columns = {v};
-        Matrix* mcv = matrix_create(v->dim, 1, mcv_columns);
-        if (mcv == NULL) {
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
-        Matrix* mlv = matrix_transpose(mcv);
-        if (mlv == NULL) {
-          matrix_destroy(mcv);
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
-        // Aplicar à matriz A à esquerda: A = (I - 2vv^T)A
-        Matrix* I = matrix_create_identity(a->nlins, a->ncols);
-        if (I == NULL) {
-          matrix_destroy(mlv);
-          matrix_destroy(mcv);
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
-        Matrix* m2vvT = matrix_mul_scalar(2, matrix_mul(mlv, mcv));
-        if (m2vvT == NULL) {
-          matrix_destroy(I);
-          matrix_destroy(mlv);
-          matrix_destroy(mcv);
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
-        a = matrix_mul(matrix_sub(I, m2vvT), a);
-        if (a == NULL) {
-          matrix_destroy(m2vvT);
-          matrix_destroy(I);
-          matrix_destroy(mlv);
-          matrix_destroy(mcv);
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
-        // Acumular em U: U = U * (I - 2vv^T) à direita nas colunas correspondentes
-        U = matrix_mul(U, matrix_sub(I, m2vvT));
-        if (U == NULL) {
-          matrix_destroy(a);
-          matrix_destroy(m2vvT);
-          matrix_destroy(I);
-          matrix_destroy(mlv);
-          matrix_destroy(mcv);
-          vector_destroy(vector_x);
-          vector_destroy(v);
-          vector_destroy(e);
-          vector_destroy(d);
-          matrix_destroy(V);
-          matrix_destroy(U);
-          errno = EMATRIXALLOCATION;
-          return NULL;
-        }
+    d->x[k] = b->columns[k].x[k];
 
-        matrix_destroy(m2vvT);
-        matrix_destroy(I);
-        matrix_destroy(mlv);
-        matrix_destroy(mcv);
-        vector_destroy(vector_x);
-        vector_destroy(v);
+    if (k + 1 < n) {
+      for (unsigned int j = k + 1; j < n; j++) {
+        reflector->x[j - k - 1] = b->columns[j].x[k];
+      }
+      const double alpha = svd_householder_vector(reflector, reflector->x, n - k - 1);
+      if (alpha != 0.0) {
+        svd_apply_reflector_right(b, v, reflector, k);
+        b->columns[k + 1].x[k] = alpha;
       }
     }
 
-    vector_set(d, k, matrix_get(a, k, k));
-    
-    // --- 2. Aniquilar elementos à direita de A[k, k+1] (Linha) ---
-    if (k < n - 2) {
-      Vector* vector_y = matrix_get_vector_column_at(a, k + 1);
-      if (vector_y == NULL) {
-        vector_destroy(e);
-        vector_destroy(d);
-        matrix_destroy(V);
-        matrix_destroy(U);
-        return NULL;
-      }
-
-      double norm_y = vector_norm(vector_y);
-
-      if (norm_y > 0) {
-        int signal = vector_y->x[0] >= 0 ? 1 : -1;
-        double beta = -signal * norm_y;
-        v = vector_copy(vector_y);
-        v->x[0] = v->x[0] - beta;
-        double norm_v = vector_norm(v);
-        if (norm_v > 0) {
-          v = vector_mul(1 / norm_v, v);
-          // para fazer vv^T vamos transformar em matriz linha e matriz coluna
-          Vector* mcv_columns = {v};
-          Matrix* mcv = matrix_create(v->dim, 1, mcv_columns);
-          if (mcv == NULL) {
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-          Matrix* mlv = matrix_transpose(mcv);
-          if (mlv == NULL) {
-            matrix_destroy(mcv);
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-          // Aplicar à matriz A à direita: A = (I - 2vv^T)A
-          Matrix* I = matrix_create_identity(a->nlins, a->ncols);
-          if (I == NULL) {
-            matrix_destroy(mlv);
-            matrix_destroy(mcv);
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-          Matrix* m2vvT = matrix_mul_scalar(2, matrix_mul(mlv, mcv));
-          if (m2vvT == NULL) {
-            matrix_destroy(I);
-            matrix_destroy(mlv);
-            matrix_destroy(mcv);
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-          a = matrix_mul(a, matrix_sub(I, m2vvT));
-          if (a == NULL) {
-            matrix_destroy(m2vvT);
-            matrix_destroy(I);
-            matrix_destroy(mlv);
-            matrix_destroy(mcv);
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-          // Acumular em V: V = V * (I - 2vv^T)
-          V = matrix_mul(V, matrix_sub(I, m2vvT));
-          if (V == NULL) {
-            matrix_destroy(m2vvT);
-            matrix_destroy(I);
-            matrix_destroy(mlv);
-            matrix_destroy(mcv);
-            vector_destroy(vector_y);
-            vector_destroy(v);
-            vector_destroy(e);
-            vector_destroy(d);
-            matrix_destroy(V);
-            matrix_destroy(U);
-            errno = EMATRIXALLOCATION;
-            return NULL;
-          }
-
-          matrix_destroy(m2vvT);
-          matrix_destroy(I);
-          matrix_destroy(mlv);
-          matrix_destroy(mcv);
-          vector_destroy(vector_y);
-          vector_destroy(v);
-        }
-      }
+    if (k + 1 < n) {
+      e->x[k] = b->columns[k + 1].x[k];
     }
+  }
+
+  matrix_destroy(b);
+  vector_destroy(reflector);
+
+  Matrix* u_thin = svd_trim_columns(u, n);
+  matrix_destroy(u);
+  if (u_thin == NULL) {
+    vector_destroy(e);
+    vector_destroy(d);
+    matrix_destroy(v);
+    errno = ESVDALLOCATION;
+    return NULL;
   }
 
   HouseholderBidiagResult* result = (HouseholderBidiagResult*)malloc(sizeof(HouseholderBidiagResult));
   if (result == NULL) {
     vector_destroy(e);
     vector_destroy(d);
-    matrix_destroy(U);
-    matrix_destroy(V);
+    matrix_destroy(v);
+    matrix_destroy(u_thin);
+    errno = ESVDALLOCATION;
     return NULL;
   }
 
-  result->e = e;
   result->d = d;
-  result->U = U;
-  result->V = V;
+  result->e = e;
+  result->U = u_thin;
+  result->V = v;
 
   return result;
 }
 
-
 QRBidiagResult* svd_qr_bidiag_iter(HouseholderBidiagResult* hbdr) {
-  if (hbdr == NULL) {
-    errno = ENULL;
+  if (hbdr == NULL || hbdr->d == NULL || hbdr->U == NULL || hbdr->V == NULL) {
+    errno = ESVDNULL;
     return NULL;
   }
 
-  unsigned int n = hbdr->e->dim;
-  double epsilon = 1e-15;
-  unsigned int max_iter = 30 * n;
-  unsigned int iteration = 0;
-  unsigned int p, q;
+  const unsigned int n = hbdr->d->dim;
+  Vector* alpha = hbdr->d;
+  Vector* beta = hbdr->e;
+  Matrix* u = hbdr->U;
+  Matrix* v = hbdr->V;
 
-  while (iteration < max_iter) {
-    // PONTO CRÍTICO 1: Critério de Desacoplamento (Splitting)
-    // Encontra o menor subbloco de trabalho que vai de p até q.
-    q = n;
-    while (q > 1 && fabs(hbdr->e->x[q - 2]) < epsilon * (fabs(hbdr->d->x[q - 2]) + fabs(hbdr->d->x[q - 1]))) {
-      hbdr->e->x[q - 2] = 0; // convergiu, isola o elemento
-      q -= 1;
+  const unsigned int max_iter = 30 * n + 10;
+  int converged = (n < 2);
+
+  for (unsigned int sweep = 0; sweep < max_iter && !converged; sweep++) {
+    unsigned int q = n - 1;
+    while (q > 0 && fabs(beta->x[q - 1]) < SVD_TOLERANCE * (fabs(alpha->x[q - 1]) + fabs(alpha->x[q]))) {
+      beta->x[q - 1] = 0.0;
+      q--;
     }
 
-    // Toda a superdiagonal virou zero. SVD Concluído. Sair do loop
-    if (q <= 1) {
+    if (q == 0) {
+      converged = 1;
       break;
     }
 
-    p = q - 1;
-    while (p > 1 && fabs(hbdr->e->x[p -2]) > epsilon * (fabs(hbdr->d->x[p - 2]) + fabs(hbdr->d->x[p - 1]))) {
-      p -= 1;
+    const double f = alpha->x[q - 1] * alpha->x[q - 1] + (q >= 2 ? beta->x[q - 2] * beta->x[q - 2] : 0.0);
+    const double g = alpha->x[q - 1] * beta->x[q - 1];
+    const double h = alpha->x[q] * alpha->x[q] + beta->x[q - 1] * beta->x[q - 1];
+    const double delta = (f - h) / 2.0;
+    const double denom = delta + lla_signal(delta) * sqrt(delta * delta + g * g);
+    const double mu = (denom != 0.0) ? h - (g * g) / denom : h;
+
+    const double t00 = alpha->x[0] * alpha->x[0];
+    const double t10 = alpha->x[0] * beta->x[0];
+    const double r0 = sqrt((t00 - mu) * (t00 - mu) + t10 * t10);
+    if (r0 == 0.0) {
+      converged = 1;
+      break;
     }
 
-    // Agora trabalhamos estritamente no subbloco de p-1 até q-1
-    unsigned int idx_ini = p - 1;
-    unsigned int idx_end = q - 1;
-    // --- Cálculo do Wilkinson Shift (Deslocamento Implícito) ---
-    // Analisa o canto inferior direito 2x2 do bloco atual
-    double d1 = hbdr->d->x[idx_end - 1];
-    double d2 = hbdr->d->x[idx_end];
-    double e1 = hbdr->e->x[idx_end - 1];
-    double e0 = (idx_end > 1) ? hbdr->e->x[idx_end - 2] : 0;
-    
-    // Matriz simétrica B^T * B local
-    double f = (d1 * d1) + (e0 * e0);
-    double g = d1 * e1;
-    double h = (d2 * d2) + (e1 * e1);
+    const double c0 = (t00 - mu) / r0;
+    const double s0 = -t10 / r0;
+    const double a0 = alpha->x[0];
+    const double b0 = beta->x[0];
+    const double a1 = alpha->x[1];
 
-    // Deslocamento de Wilkinson puro
-    double mu = h - (g * g) / ((f - h) / 2 + lla_signal((f - h) / 2) * sqrt(pow(((f - h) / 2), 2.0) + g * g));
-    
-    // --- Perseguição do Calombo (Bulge Chasing) ---
-    // Configura o primeiro "calombo" fora da bidiagonal
-    double x = hbdr->d->x[idx_ini] * hbdr->d->x[idx_ini] - mu;
-    double z = hbdr->d->x[idx_ini] * hbdr->e->x[idx_ini];
+    svd_rotate_columns(v, 0, c0, s0);
+    alpha->x[0] = c0 * a0 - s0 * b0;
+    beta->x[0] = s0 * a0 + c0 * b0;
+    alpha->x[1] = c0 * a1;
 
-    for (unsigned k = idx_ini; k < idx_end - 1; k++) {
-      // Rotação à direita (Givens) para eliminar z
-      double* givens = givens_rotation(x, z);
-      double c = givens[0];
-      double s = givens[1];
-      
-      // Aplica rotação nas colunas k e k+1 de d e e
-      // Isto gera um calombo indesejado na linha abaixo
-      double left_buldge = svd_rotate_columns(hbdr->d, hbdr->e, k, k + 1, c, s);
-      
-      // Acumula rotação em V
-      svd_rotate_matrix_columns(hbdr->V, k, k + 1, c, s);
-      
-      // Rotação à esquerda (Givens) para eliminar o calombo gerado na linha
-      x = hbdr->d->x[k];
-      z = left_buldge; // calombo esquerdo
-      givens = givens_rotation(x, z);
-      c = givens[0];
-      s = givens[1];
+    double gamma = -s0 * a1;
 
-      double right_buldge = svd_rotate_lines(hbdr->d, hbdr->e, k, k + 1, c, s);
+    for (unsigned int p = 0; p < q; p++) {
+      const double ap = alpha->x[p];
+      const double r = sqrt(ap * ap + gamma * gamma);
+      double gbulge = 0.0;
 
-      // Acumula rotação em U
-      svd_rotate_matrix_columns(hbdr->U, k, k + 1, c, s);
+      double c;
+      double s;
+      if (r > 0.0) {
+        c = ap / r;
+        s = -gamma / r;
+      } else {
+        c = 0.0;
+        s = 1.0;
+      }
 
-      // Atualiza coordenadas para o próximo passo da perseguição
-      if (k < idx_end - 1) {
-        x = hbdr->e->x[k];
-        z = right_buldge;
-      }    
+      const double ap1 = alpha->x[p + 1];
+      const double bp = beta->x[p];
+
+      svd_rotate_rows(u, p, c, s);
+      alpha->x[p] = r;
+      beta->x[p] = c * bp - s * ap1;
+      alpha->x[p + 1] = s * bp + c * ap1;
+
+      if (p + 1 < n - 1) {
+        const double bp1 = beta->x[p + 1];
+        beta->x[p + 1] = c * bp1;
+        gbulge = -s * bp1;
+      }
+
+      if (p + 2 <= q) {
+        const double bp = beta->x[p];
+        const double r2 = sqrt(bp * bp + gbulge * gbulge);
+
+        if (r2 > 0.0) {
+          const double c = bp / r2;
+          const double s = -gbulge / r2;
+          const double a1 = alpha->x[p + 1];
+          const double b1 = beta->x[p + 1];
+          const double a2 = alpha->x[p + 2];
+
+          svd_rotate_columns(v, p + 1, c, s);
+          beta->x[p] = r2;
+          alpha->x[p + 1] = c * a1 - s * b1;
+          beta->x[p + 1] = s * a1 + c * b1;
+          alpha->x[p + 2] = c * a2;
+          gamma = -s * a2;
+        } else {
+          gamma = 0.0;
+        }
+      }
     }
 
-    iteration++;
-  }
-
-  QRBidiagResult* result = (QRBidiagResult*)malloc(sizeof(QRBidiagResult));
-  if (result == NULL) {
-    errno = ENULL;
-    return NULL;
-  }
-  result->d = hbdr->d;
-  result->U = hbdr->U;
-  result->V = hbdr->V;
-
-  return result;
-}
-
-SVDPosProcResult* svd_pos_proc(QRBidiagResult* bdr) {
-  unsigned int n = bdr->d->dim;
-  unsigned int i;
-
-  for (i = 0; i < n; i++) {
-    if (bdr->d->x[i] < 0) {
-      bdr->d->x[i] = -1 * bdr->d->x[i];
-      // inverte o vetor correspondente para manter consistência
-      for (unsigned int j = 0; j < bdr->V->nlins; j++) {
-        bdr->V->columns[i].x[j] = -1 * bdr->V->columns[i].x[j];
+    for (unsigned int k = 0; k < q; k++) {
+      if (fabs(beta->x[k]) < SVD_TOLERANCE * (fabs(alpha->x[k]) + fabs(alpha->x[k + 1]))) {
+        beta->x[k] = 0.0;
       }
     }
   }
 
-  for (i = 1; i < n; i++) {
-    double key = bdr->d->x[i];
-    unsigned int j = i - 1;
-    while (j >= 0 && bdr->d->x[j + 1] < key) {
-      double aux = bdr->d->x[j];
-      bdr->d->x[j] = bdr->d->x[j + 1];
-      bdr->d->x[j + 1] = aux;
+  if (!converged) {
+    errno = ESVDNOTCONVERGED;
+    return NULL;
+  }
 
-      svd_change_columns(bdr->U, j, j + 1);
-      svd_change_columns(bdr->V, j, j + 1);
-      
-      j--;
+  QRBidiagResult* result = (QRBidiagResult*)malloc(sizeof(QRBidiagResult));
+  if (result == NULL) {
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  result->d = alpha;
+  result->U = u;
+  result->V = v;
+
+  hbdr->d = NULL;
+  hbdr->U = NULL;
+  hbdr->V = NULL;
+  vector_destroy(hbdr->e);
+  hbdr->e = NULL;
+
+  return result;
+}
+
+SVDResult* svd_pos_proc(QRBidiagResult* bdr) {
+  if (bdr == NULL || bdr->d == NULL || bdr->U == NULL || bdr->V == NULL) {
+    errno = ESVDNULL;
+    return NULL;
+  }
+
+  const unsigned int n = bdr->d->dim;
+  Vector* sigma = bdr->d;
+  Matrix* u = bdr->U;
+  Matrix* v = bdr->V;
+
+  for (unsigned int i = 0; i < n; i++) {
+    if (sigma->x[i] < 0.0) {
+      sigma->x[i] = -sigma->x[i];
+      for (unsigned int j = 0; j < u->nlins; j++) {
+        u->columns[i].x[j] = -u->columns[i].x[j];
+      }
     }
   }
 
-  Matrix* vt = matrix_transpose(bdr->V);
+  for (unsigned int i = 0; i + 1 < n; i++) {
+    unsigned int maior = i;
+    for (unsigned int j = i + 1; j < n; j++) {
+      if (sigma->x[j] > sigma->x[maior]) {
+        maior = j;
+      }
+    }
+
+    if (maior != i) {
+      const double aux = sigma->x[i];
+      sigma->x[i] = sigma->x[maior];
+      sigma->x[maior] = aux;
+      svd_swap_columns(u, i, maior);
+      svd_swap_columns(v, i, maior);
+    }
+  }
+
+  Matrix* vt = matrix_transpose(v);
   if (vt == NULL) {
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+  matrix_destroy(v);
+
+  SVDResult* result = (SVDResult*)malloc(sizeof(SVDResult));
+  if (result == NULL) {
+    matrix_destroy(vt);
+    errno = ESVDALLOCATION;
     return NULL;
   }
 
-  SVDPosProcResult* result = (SVDPosProcResult*)malloc(sizeof(SVDPosProcResult));
-  if (result == NULL) {
+  result->U = u;
+  result->sigma = sigma;
+  result->VT = vt;
+
+  bdr->d = NULL;
+  bdr->U = NULL;
+  bdr->V = NULL;
+
+  return result;
+}
+
+static SVDResult* svd_golub_reinsch_tall(const Matrix* a) {
+  HouseholderBidiagResult* hbdr = svd_householder_bidiag(a);
+  if (hbdr == NULL) {
     return NULL;
   }
-  result->U = bdr->U;
-  result->sigma = bdr->d;
+
+  QRBidiagResult* bdr = svd_qr_bidiag_iter(hbdr);
+  svd_householder_bidiag_destroy(hbdr);
+  if (bdr == NULL) {
+    return NULL;
+  }
+
+  SVDResult* result = svd_pos_proc(bdr);
+  svd_qr_bidiag_destroy(bdr);
+  return result;
+}
+
+SVDResult* svd_golub_reinsch(const Matrix* a) {
+  if (a == NULL) {
+    errno = ESVDNULL;
+    return NULL;
+  }
+
+  const unsigned int m = a->nlins;
+  const unsigned int n = a->ncols;
+
+  if (m == 0 || n == 0) {
+    errno = ESVDINVALIDDIM;
+    return NULL;
+  }
+
+  if (m >= n) {
+    return svd_golub_reinsch_tall(a);
+  }
+
+  Matrix* at = matrix_transpose(a);
+  if (at == NULL) {
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  SVDResult* at_result = svd_golub_reinsch_tall(at);
+  matrix_destroy(at);
+  if (at_result == NULL) {
+    return NULL;
+  }
+
+  const unsigned int nsing = (m < n) ? m : n;
+
+  Vector* sigma = vector_create_empty(nsing);
+  if (sigma == NULL) {
+    matrix_destroy(at_result->VT);
+    matrix_destroy(at_result->U);
+    vector_destroy(at_result->sigma);
+    free(at_result);
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < nsing; i++) {
+    sigma->x[i] = at_result->sigma->x[i];
+  }
+
+  Matrix* u = matrix_transpose(at_result->VT);
+  Matrix* vt = matrix_transpose(at_result->U);
+  matrix_destroy(at_result->VT);
+  matrix_destroy(at_result->U);
+  vector_destroy(at_result->sigma);
+  free(at_result);
+
+  if (u == NULL || vt == NULL) {
+    matrix_destroy(u);
+    matrix_destroy(vt);
+    vector_destroy(sigma);
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  SVDResult* result = (SVDResult*)malloc(sizeof(SVDResult));
+  if (result == NULL) {
+    matrix_destroy(u);
+    matrix_destroy(vt);
+    vector_destroy(sigma);
+    errno = ESVDALLOCATION;
+    return NULL;
+  }
+
+  result->U = u;
+  result->sigma = sigma;
   result->VT = vt;
 
   return result;
 }
 
-double svd_rotate_columns(Vector* d, Vector* e, unsigned int i, unsigned int j, double c, double s) {
-  double d_k = d->x[i];
-  double e_k = e->x[i];
-  double d_k1 = d->x[j];
-
-  d->x[i] = d_k * c - e_k * s;
-  e->x[i] = d_k * s + e_k * c;
-  d->x[j] = d_k1 * c;
-
-  double left_buldge = -d_k1 * s;
-
-  return left_buldge;
-}
-
-double svd_rotate_lines(Vector* d, Vector* e, unsigned int i, unsigned int j, double c, double s) {
-  double e_k = e->x[i];
-  double d_k1 = d->x[j];
-
-  e->x[i] = e_k * c - d_k1 * s;
-  d->x[j] = e_k * s + d_k1 * c;
-
-  double right_buldge = 0;
-
-  if (i < d->dim - 2) {
-    double e_k1 = e->x[j];
-    e->x[j] = e_k1 * c;
-    right_buldge = -e_k1 * s;
+void svd_destroy(SVDResult* result) {
+  if (result == NULL) {
+    return;
   }
 
-  return right_buldge;
+  matrix_destroy(result->U);
+  vector_destroy(result->sigma);
+  matrix_destroy(result->VT);
+  free(result);
 }
 
-void svd_rotate_matrix_columns(Matrix* V, unsigned int i, unsigned int j, double c, double s) {
-  unsigned int nlines = V->nlins;
-  for (unsigned int l = 0; l < nlines; l++) {
-    double val_k = matrix_get(V, l, i);
-    double val_k1 = matrix_get(V, l, j);
-    // aplica a transformação linear de rotação nas colunas i e j
-    matrix_set(V, l, i, val_k * c - val_k1 * s);
-    matrix_set(V, l, j, val_k * s + val_k1 * c);
+void svd_householder_bidiag_destroy(HouseholderBidiagResult* result) {
+  if (result == NULL) {
+    return;
   }
+
+  vector_destroy(result->d);
+  vector_destroy(result->e);
+  matrix_destroy(result->U);
+  matrix_destroy(result->V);
+  free(result);
 }
 
-void svd_change_columns(Matrix* m, unsigned int i, unsigned int j) {
-  for (unsigned int l = 0; l < m->nlins; l++) {
-    double aux = matrix_get(m, i, j);
-    matrix_set(m, i, j, matrix_get(m, i, j + 1));
-    matrix_set(m, i, j + 1, aux);
+void svd_qr_bidiag_destroy(QRBidiagResult* result) {
+  if (result == NULL) {
+    return;
   }
+
+  vector_destroy(result->d);
+  matrix_destroy(result->U);
+  matrix_destroy(result->V);
+  free(result);
 }
