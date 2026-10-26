@@ -4,3 +4,6 @@ lim
 *.dSYM
 *.c.swp
 *.h.swp
+liblla.a
+liblla.so
+obj/

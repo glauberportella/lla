@@ -16,6 +16,7 @@ Por ser um projeto recreativo, a biblioteca prioriza clareza sobre desempenho br
     ├── matrix.h / matrix.c   # tipo Matrix e operações sobre matrizes
     ├── lu.h / lu.c           # decomposição LU com pivoteamento parcial
     ├── svd.h / svd.c         # decomposição em valores singulares
+    ├── lsystem.h / lsystem.c # resolução de sistemas lineares (LU e mínimos quadrados via SVD)
     ├── main.c                # testes
     ├── bech.c                # benchmark de performance
     └── lim.c                 # limites de dimensão
@@ -32,7 +33,28 @@ make bench      # gera o executável ./bech
 make bench-run  # compila e executa o benchmark
 make lim        # gera o executável ./lim
 make lim-run    # compila e executa a busca de limites
-make clean      # remove os executáveis
+make libs       # gera liblla.a e liblla.so
+make static     # gera apenas a biblioteca estática liblla.a
+make shared     # gera apenas a biblioteca compartilhada liblla.so
+make clean      # remove os executáveis e as bibliotecas
+```
+
+## Biblioteca estática e compartilhada
+
+O alvo `make libs` compila os módulos da biblioteca (`vector`, `matrix`, `lu`,
+`svd` e `lsystem`) em `obj/` com `-fPIC` e gera os dois formatos:
+
+- `liblla.a`: biblioteca estática;
+- `liblla.so`: biblioteca compartilhada.
+
+Uso:
+
+```sh
+# estática (o código fica embutido no executável)
+cc -Isrc meu_app.c -llla -lm
+
+# compartilhada (o executável carrega liblla.so em tempo de execução)
+cc -Isrc meu_app.c -llla -lm -Wl,-rpath,/home/user/lla
 ```
 
 O build usa `-Wall -Wextra -Werror`, então qualquer aviso interrompe a compilação.
@@ -252,6 +274,8 @@ vector_destroy(resultado);
 | `matrix_mul_vector(a, x)` | Retorna `A · x`, com `x` de dimensão igual ao número de colunas de `A` |
 | `matrix_inverse(a)` | Retorna `A⁻¹` (matriz quadrada) via decomposição LU |
 | `matrix_determinant(a)` | Retorna `det(A)` (matriz quadrada) via decomposição LU |
+| `matrix_trace(a)` | Retorna o traço de `A` (soma da diagonal principal) |
+| `matrix_rank(a)` | Retorna o posto de `A` via SVD (valores singulares acima de `eps · max(m,n) · σ₁`) |
 | `matrix_print(m, label)` / `matrix_println(m, label)` | Imprime a matriz com um rótulo |
 
 `matrix_determinant` devolve `0.0` para matrizes singulares e `NAN` (com `errno`
@@ -412,6 +436,35 @@ SVDResult* r = svd_pos_proc(bdr);
 svd_qr_bidiag_destroy(bdr);
 ```
 
+### Sistemas lineares (`lsystem.h`)
+
+| Função | Descrição |
+| --- | --- |
+| `lsystem_solve(a, b)` | Resolve o sistema linear `A · x = b` |
+
+A escolha do método é automática:
+
+- matriz **quadrada e regular**: decomposição LU com pivoteamento parcial
+  (substituições direta e inversa);
+- matriz **singular** ou **retangular** (excesso ou pouco definida):
+  mínimos quadrados via SVD com corte de valores singulares abaixo de
+  `eps · max(m, n) · σ₁` — a solução devolvida é a de **norma mínima**.
+
+```c
+double c1[] = { 3.0, 2.0 };
+double c2[] = { -1.0, 4.0 };
+Vector colunas[] = {
+  { .dim = 2, .x = c1 },
+  { .dim = 2, .x = c2 },
+};
+
+Matrix* a = matrix_create(2, 2, colunas);
+double bx[] = { 4.0, 26.0 };
+Vector* b = vector_create(2, bx);
+
+Vector* x = lsystem_solve(a, b); // x = (3, 5)
+```
+
 ## Exemplo
 
 ```c
@@ -467,11 +520,11 @@ códigos abaixo:
 | `ESVDINVALIDDIM` | 4001 | Matriz sem linhas ou sem colunas |
 | `ESVDALLOCATION` | 4002 | Falha ao alocar memória na decomposição |
 | `ESVDNOTCONVERGED` | 4003 | A iteração QR não convergiu dentro do limite de varreduras |
+| `ELSYSTEMNULL` | 3000 | Argumento nulo na resolução do sistema linear |
+| `ELSYSTEMINVALIDDIM` | 3001 | Dimensões incompatíveis entre `A` e `b`, ou nulas |
 
 ## Próximos passos
 
-- Resolução de mínimos quadrados usando a SVD (`X = V · Σ⁻¹ · Uᵀ · b`)
-- Build como biblioteca estática/compartilhada
 - Separar os testes do executável principal
 - Reduzir o overhead das operações internas (validação de índice a cada
   acesso e alocação por coluna), o que ampliaria os limites de dimensão

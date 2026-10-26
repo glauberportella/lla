@@ -2,14 +2,32 @@ CC      ?= gcc
 CFLAGS  ?= -g -Wall -Wextra -Werror -Isrc
 LDLIBS  ?= -lm
 
-LIB_SRC = src/vector.c src/matrix.c src/lu.c src/svd.c
+LIB_SRC = src/vector.c src/matrix.c src/lu.c src/svd.c src/lsystem.c
+LIB_NAME = lla
 
-.PHONY: all build bench lim run bench-run lim-run clean
+OBJ_DIR  = obj
+LIB_OBJS = $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(LIB_SRC))
 
-all: build bench lim
+.PHONY: all build libs static shared bench lim run bench-run lim-run clean
+
+all: build libs bench lim
+
+# objetos com -fPIC, usados pelos dois formatos de biblioteca
+obj:
+	mkdir -p $(OBJ_DIR)
+
+$(OBJ_DIR)/%.o: src/%.c | obj
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 build: $(LIB_SRC) src/main.c
 	$(CC) $(CFLAGS) $^ -o al $(LDLIBS)
+
+libs: static shared
+static: $(LIB_OBJS)
+	ar rcs lib$(LIB_NAME).a $(LIB_OBJS)
+
+shared: $(LIB_OBJS)
+	$(CC) -shared $(LIB_OBJS) -o lib$(LIB_NAME).so $(LDLIBS)
 
 bench: $(LIB_SRC) src/bech.c
 	$(CC) $(CFLAGS) $^ -o bech $(LDLIBS)
@@ -27,5 +45,5 @@ lim-run: lim
 	./lim
 
 clean:
-	rm -f al bech lim
-	rm -rf al.dSYM bech.dSYM lim.dSYM
+	rm -f al bech lim lib$(LIB_NAME).a lib$(LIB_NAME).so
+	rm -rf al.dSYM bech.dSYM lim.dSYM $(OBJ_DIR)
