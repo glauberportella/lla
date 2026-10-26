@@ -22,6 +22,8 @@ typedef struct matrix_rn_t {
 
 Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols);
 Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]);
+Matrix* matrix_create_identity(unsigned int m, unsigned int n);
+
 void matrix_destroy(Matrix* m);
 
 /**
@@ -33,7 +35,7 @@ void matrix_destroy(Matrix* m);
  */
 int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned int j);
 Vector* matrix_get_line_vectors(const Matrix* a);
-
+Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i);
 
 /**
  * @brief matrix_set(Matrix*, const unsigned int, const unsigned int, double)
@@ -68,6 +70,15 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m);
 Matrix* matrix_transpose(const Matrix* m);
 
 /**
+ * @brief matrix_mul_vector(const Matrix*, const Vector*)
+ * Retorna o produto A * x, com A having m linhas e n colunas e x com n
+ * coordenadas.
+ *
+ * @return Vector* o resultado, com m coordenadas, ou NULL com errno definido.
+ */
+Vector* matrix_mul_vector(const Matrix* m, const Vector* v);
+
+/**
  * @brief matrix_inverse(const Matrix*)
  * Retorna a inversa da matriz quadrada m, resolvendo A * X = I via decomposicao LU.
  *
@@ -83,6 +94,24 @@ Matrix* matrix_inverse(const Matrix* m);
  * definido em caso de erro (matriz nula, nao quadrada ou falha de alocacao).
  */
 double matrix_determinant(const Matrix* m);
+
+/**
+ * @brief matrix_trace(const Matrix*)
+ * Soma da diagonal principal da matriz quadrada m.
+ *
+ * @return double o traco, ou NAN com errno definido (matriz nula ou nao quadrada).
+ */
+double matrix_trace(const Matrix* m);
+
+/**
+ * @brief matrix_rank(const Matrix*)
+ * Calcula o posto da matriz a via decomposicao em valores singulares: o
+ * numero de valores singulares acima de eps * max(m, n) * sigma_max.
+ *
+ * @return unsigned int o posto, ou (unsigned int)-1 com errno definido
+ * (matriz nula ou sem linhas/colunas).
+ */
+unsigned int matrix_rank(const Matrix* m);
 
 /**
  * Saída

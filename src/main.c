@@ -5,6 +5,8 @@
 #include "vector.h"
 #include "matrix.h"
 #include "lu.h"
+#include "svd.h"
+#include "lsystem.h"
 
 void test_vector_create_empty() {
   printf("--- TEST: vector_create_empty ---\n");
@@ -829,6 +831,515 @@ void test_vector_product() {
   assert(errno == EINVALIDDIM);
 }
 
+static double svd_reconstruction_error(const Matrix* a, const SVDResult* r) {
+  const unsigned int m = a->nlins;
+  const unsigned int n = a->ncols;
+  const unsigned int nsing = r->sigma->dim;
+
+  double erro = 0.0;
+  for (unsigned int i = 0; i < m; i++) {
+    for (unsigned int j = 0; j < n; j++) {
+      double soma = 0.0;
+      for (unsigned int k = 0; k < nsing; k++) {
+        soma += matrix_get(r->U, i, k) * r->sigma->x[k] * matrix_get(r->VT, k, j);
+      }
+      const double dif = soma - matrix_get(a, i, j);
+      erro += dif * dif;
+    }
+  }
+
+  return sqrt(erro);
+}
+
+static double svd_orthogonality_error(const Matrix* m, unsigned int n) {
+  double erro = 0.0;
+  for (unsigned int i = 0; i < n; i++) {
+    for (unsigned int j = 0; j < n; j++) {
+      double soma = 0.0;
+      for (unsigned int k = 0; k < m->nlins; k++) {
+        soma += matrix_get(m, k, i) * matrix_get(m, k, j);
+      }
+      const double esperado = (i == j) ? 1.0 : 0.0;
+      const double dif = soma - esperado;
+      erro += dif * dif;
+    }
+  }
+  return sqrt(erro);
+}
+
+void test_svd_golub_reinsch() {
+  printf("--- TEST: svd_golub_reinsch ---\n");
+
+  // A = | 1 2 | tem valores singulares 5.4649857... e 0.3659664...
+  double v1[] = {1.0, 3.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(r->sigma->dim == 2);
+  assert(r->U->nlins == 2);
+  assert(r->U->ncols == 2);
+  assert(r->VT->nlins == 2);
+  assert(r->VT->ncols == 2);
+
+  assert(fabs(r->sigma->x[0] - 5.464985704222280) < 1e-9);
+  assert(fabs(r->sigma->x[1] - 0.365966190626257) < 1e-9);
+  assert(r->sigma->x[0] >= r->sigma->x[1]);
+  assert(r->sigma->x[1] >= 0.0);
+
+  matrix_println(r->U, "U");
+  vector_println(r->sigma, "sigma");
+  matrix_println(r->VT, "VT");
+
+  // A = U * diag(sigma) * VT
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+
+  // U e V sao ortogonais
+  assert(svd_orthogonality_error(r->U, 2) < 1e-9);
+  assert(svd_orthogonality_error(r->VT, 2) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_diagonal() {
+  printf("--- TEST: svd_diagonal ---\n");
+
+  double v1[] = {3.0, 0.0, 0.0};
+  double v2[] = {0.0, 2.0, 0.0};
+  double v3[] = {0.0, 0.0, 1.0};
+  Vector colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(3, 3, colunas);
+  assert(a != NULL);
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(fabs(r->sigma->x[0] - 3.0) < 1e-9);
+  assert(fabs(r->sigma->x[1] - 2.0) < 1e-9);
+  assert(fabs(r->sigma->x[2] - 1.0) < 1e-9);
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_retangular() {
+  printf("--- TEST: svd_retangular ---\n");
+
+  double v1[] = {1.0, 2.0, 3.0, 4.0};
+  double v2[] = {2.0, 0.0, 1.0, -1.0};
+  double v3[] = {0.0, 1.0, 2.0, 2.0};
+  Vector colunas[] = {
+    { .dim = 4, .x = v1 },
+    { .dim = 4, .x = v2 },
+    { .dim = 4, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(4, 3, colunas);
+  assert(a != NULL);
+  matrix_println(a, "A");
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(r->sigma->dim == 3);
+  assert(r->U->nlins == 4);
+  assert(r->U->ncols == 3);
+  assert(r->VT->nlins == 3);
+  assert(r->VT->ncols == 3);
+
+  assert(r->sigma->x[0] >= r->sigma->x[1]);
+  assert(r->sigma->x[1] >= r->sigma->x[2]);
+  assert(r->sigma->x[2] >= 0.0);
+
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+  assert(svd_orthogonality_error(r->U, 3) < 1e-9);
+  assert(svd_orthogonality_error(r->VT, 3) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_mais_linhas_que_colunas() {
+  printf("--- TEST: svd_mais_linhas_que_colunas ---\n");
+
+  double v1[] = {1.0, 2.0};
+  double v2[] = {3.0, 4.0};
+  double v3[] = {5.0, 6.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+    { .dim = 2, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(2, 3, colunas);
+  assert(a != NULL);
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(r->sigma->dim == 2);
+  assert(r->U->nlins == 2);
+  assert(r->U->ncols == 2);
+  assert(r->VT->nlins == 2);
+  assert(r->VT->ncols == 3);
+
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_posto_deficiente() {
+  printf("--- TEST: svd_posto_deficiente ---\n");
+
+  // A segunda coluna e o dobro da primeira: posto 1
+  double v1[] = {1.0, 2.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(fabs(r->sigma->x[0] - 5.0) < 1e-9);
+  assert(fabs(r->sigma->x[1]) < 1e-9);
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_matriz_nao_alterada() {
+  printf("--- TEST: svd_matriz_nao_alterada ---\n");
+
+  double v1[] = {1.0, 2.0, 3.0};
+  double v2[] = {4.0, 5.0, 6.0};
+  Vector colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(3, 2, colunas);
+  assert(a != NULL);
+
+  SVDResult* r = svd_golub_reinsch(a);
+  assert(r != NULL);
+
+  assert(matrix_get(a, 0, 0) == 1.0);
+  assert(matrix_get(a, 1, 0) == 2.0);
+  assert(matrix_get(a, 2, 0) == 3.0);
+  assert(matrix_get(a, 0, 1) == 4.0);
+  assert(matrix_get(a, 1, 1) == 5.0);
+  assert(matrix_get(a, 2, 1) == 6.0);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_svd_etapas() {
+  printf("--- TEST: svd_etapas ---\n");
+
+  double v1[] = {1.0, 3.0, 5.0};
+  double v2[] = {2.0, 4.0, 6.0};
+  Vector colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(3, 2, colunas);
+  assert(a != NULL);
+
+  HouseholderBidiagResult* hbdr = svd_householder_bidiag(a);
+  assert(hbdr != NULL);
+  assert(hbdr->d->dim == 2);
+  assert(hbdr->e->dim == 1);
+  assert(hbdr->U->nlins == 3);
+  assert(hbdr->U->ncols == 2);
+  assert(hbdr->V->nlins == 2);
+  assert(hbdr->V->ncols == 2);
+
+  QRBidiagResult* bdr = svd_qr_bidiag_iter(hbdr);
+  svd_householder_bidiag_destroy(hbdr);
+  assert(bdr != NULL);
+  assert(bdr->d->dim == 2);
+  assert(bdr->U->nlins == 3);
+  assert(bdr->U->ncols == 2);
+  assert(bdr->V->nlins == 2);
+  assert(bdr->V->ncols == 2);
+
+  SVDResult* r = svd_pos_proc(bdr);
+  svd_qr_bidiag_destroy(bdr);
+  assert(r != NULL);
+
+  assert(svd_reconstruction_error(a, r) < 1e-9);
+  assert(svd_orthogonality_error(r->U, 2) < 1e-9);
+  assert(svd_orthogonality_error(r->VT, 2) < 1e-9);
+
+  svd_destroy(r);
+  matrix_destroy(a);
+}
+
+void test_matrix_trace() {
+  printf("--- TEST: matrix_trace ---\n");
+
+  double v1[] = {3.0, 1.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  assert(fabs(matrix_trace(a) - 7.0) < 1e-9);
+
+  Matrix* b = matrix_create_empty(2, 3);
+  assert(b != NULL);
+  assert(isnan(matrix_trace(b)));
+  assert(errno == EMATRIXINVALIDDIM);
+  matrix_destroy(b);
+
+  assert(isnan(matrix_trace(NULL)));
+  assert(errno == EMATRIXNULL);
+
+  matrix_destroy(a);
+}
+
+void test_matrix_rank() {
+  printf("--- TEST: matrix_rank ---\n");
+
+  double v1[] = {1.0, 2.0, 3.0};
+  double v2[] = {2.0, 4.0, 6.0};
+  double v3[] = {0.0, 1.0, 0.0};
+  Vector colunas[] = {
+    { .dim = 3, .x = v1 },
+    { .dim = 3, .x = v2 },
+    { .dim = 3, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(3, 3, colunas);
+  assert(a != NULL);
+  assert(matrix_rank(a) == 2);
+  matrix_destroy(a);
+
+  Matrix* b = matrix_create_empty(3, 3);
+  assert(b != NULL);
+  assert(matrix_rank(b) == 0);
+  matrix_destroy(b);
+
+  assert(matrix_rank(NULL) == (unsigned int)-1);
+  assert(errno == EMATRIXNULL);
+}
+
+void test_lsystem_sistema_quadrado() {
+  printf("--- TEST: lsystem_sistema_quadrado ---\n");
+
+  double v1[] = {3.0, 2.0};
+  double v2[] = {-1.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  double bx[] = {4.0, 26.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+  assert(x->dim == 2);
+  assert(fabs(x->x[0] - 3.0) < 1e-9);
+  assert(fabs(x->x[1] - 5.0) < 1e-9);
+
+  // verificacao: A * x = b
+  Vector* ax = matrix_mul_vector(a, x);
+  assert(ax != NULL);
+  assert(fabs(ax->x[0] - bx[0]) < 1e-9);
+  assert(fabs(ax->x[1] - bx[1]) < 1e-9);
+
+  vector_destroy(ax);
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_sistema_singular() {
+  printf("--- TEST: lsystem_sistema_singular ---\n");
+
+  double v1[] = {1.0, 2.0};
+  double v2[] = {2.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  double bx[] = {3.0, 6.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+
+  // solucao de norma minima dos minimos quadrados
+  double rec1 = 0.0;
+  double rec2 = 0.0;
+  for (unsigned int i = 0; i < 2; i++) {
+    rec1 += a->columns[i].x[0] * x->x[i];
+    rec2 += a->columns[i].x[1] * x->x[i];
+  }
+  assert(fabs(rec1 - 3.0) < 1e-9);
+  assert(fabs(rec2 - 6.0) < 1e-9);
+
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_sistema_retangular() {
+  printf("--- TEST: lsystem_sistema_retangular ---\n");
+
+  double v1[] = {1.0, 1.0};
+  double v2[] = {0.0, 1.0};
+  double v3[] = {2.0, 0.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+    { .dim = 2, .x = v3 },
+  };
+
+  Matrix* a = matrix_create(2, 3, colunas);
+  assert(a != NULL);
+
+  double bx[] = {2.0, 1.0};
+  Vector* b = vector_create(2, bx);
+  assert(b != NULL);
+
+  Vector* x = lsystem_solve(a, b);
+  assert(x != NULL);
+  assert(x->dim == 3);
+
+  // A^T x = b x? x = A^T(A A^T)^-1 b com norma minima
+  Vector* ax = matrix_mul_vector(a, x);
+  assert(ax != NULL);
+  assert(fabs(ax->x[0] - 2.0) < 1e-9);
+  assert(fabs(ax->x[1] - 1.0) < 1e-9);
+  vector_destroy(ax);
+
+  vector_destroy(x);
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_lsystem_erros() {
+  printf("--- TEST: lsystem_erros ---\n");
+
+  double v1[] = {1.0, 1.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+  };
+
+  assert(lsystem_solve(NULL, NULL) == NULL);
+  assert(errno == ELSYSTEMNULL);
+
+  Matrix* a = matrix_create(2, 1, colunas);
+  assert(a != NULL);
+
+  double bx[] = {1.0, 2.0, 3.0};
+  Vector* b = vector_create(3, bx);
+  assert(b != NULL);
+
+  assert(lsystem_solve(a, b) == NULL);
+  assert(errno == ELSYSTEMINVALIDDIM);
+
+  vector_destroy(b);
+  matrix_destroy(a);
+}
+
+void test_svd_erros() {
+  printf("--- TEST: svd_erros ---\n");
+
+  assert(svd_golub_reinsch(NULL) == NULL);
+  assert(errno == ESVDNULL);
+
+  assert(svd_householder_bidiag(NULL) == NULL);
+  assert(errno == ESVDNULL);
+
+  assert(svd_qr_bidiag_iter(NULL) == NULL);
+  assert(errno == ESVDNULL);
+
+  assert(svd_pos_proc(NULL) == NULL);
+  assert(errno == ESVDNULL);
+}
+
+void test_matrix_mul_vector() {
+  printf("--- TEST: matrix_mul_vector ---\n");
+
+  double v1[] = {1.0, 2.0};
+  double v2[] = {3.0, 4.0};
+  Vector colunas[] = {
+    { .dim = 2, .x = v1 },
+    { .dim = 2, .x = v2 },
+  };
+
+  Matrix* a = matrix_create(2, 2, colunas);
+  assert(a != NULL);
+
+  double coords[] = {1.0, 1.0};
+  Vector* x = vector_create(2, coords);
+  assert(x != NULL);
+
+  Vector* y = matrix_mul_vector(a, x);
+  assert(y != NULL);
+  assert(y->dim == 2);
+  assert(fabs(y->x[0] - 4.0) < 1e-9);
+  assert(fabs(y->x[1] - 6.0) < 1e-9);
+
+  // Dimensao incompativel
+  double coords_invalido[] = {1.0, 2.0, 3.0};
+  Vector* invalido = vector_create(3, coords_invalido);
+  assert(invalido != NULL);
+
+  assert(matrix_mul_vector(a, invalido) == NULL);
+  assert(errno == EMATRIXINVALIDMUL);
+
+  // Vetor nulo
+  assert(matrix_mul_vector(a, NULL) == NULL);
+  assert(errno == EMATRIXNULL);
+
+  vector_destroy(invalido);
+  vector_destroy(y);
+  vector_destroy(x);
+  matrix_destroy(a);
+}
+
 int main() {
   test_vector_create_empty();
   test_vector_create();
@@ -852,5 +1363,20 @@ int main() {
   test_matrix_determinant();
   test_matrix_remove_column_vector_at();
   test_vector_product();
+  test_matrix_mul_vector();
+  test_svd_golub_reinsch();
+  test_svd_diagonal();
+  test_svd_retangular();
+  test_svd_mais_linhas_que_colunas();
+  test_svd_posto_deficiente();
+  test_svd_matriz_nao_alterada();
+  test_svd_etapas();
+  test_svd_erros();
+  test_matrix_trace();
+  test_matrix_rank();
+  test_lsystem_sistema_quadrado();
+  test_lsystem_sistema_singular();
+  test_lsystem_sistema_retangular();
+  test_lsystem_erros();
   return 0;
 }

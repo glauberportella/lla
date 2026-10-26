@@ -65,6 +65,30 @@ void vector_destroy(Vector* v) {
   }
 }
 
+Vector* vector_copy(const Vector* v) {
+  if (v == NULL) {
+    errno = EVECTORNULL;
+    return NULL;
+  }
+
+  Vector* copy = vector_create(v->dim, v->x);
+  if (copy == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  return copy;
+}
+
+Vector* vector_set(Vector* v, unsigned int i, double value) {
+  if (v == NULL) {
+    errno = EVECTORNULL;
+    return NULL;
+  }
+  v->x[i] = value;
+  return v;
+}
+
 Vector* vector_add(const Vector* a, const Vector* b) {
   if (a == NULL || b == NULL) {
     errno = EVECTORNULL;

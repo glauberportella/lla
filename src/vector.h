@@ -15,6 +15,9 @@ Vector* vector_create_empty(unsigned int dim);
 Vector* vector_create(unsigned int dim, double coords[]);
 void vector_destroy(Vector* v);
 
+Vector* vector_copy(const Vector* v);
+Vector* vector_set(Vector* v, unsigned int i, double value);
+
 Vector* vector_add(const Vector* a, const Vector* b);
 Vector* vector_sub(const Vector* a, const Vector* b);
 Vector* vector_mul(double scalar, const Vector* a);

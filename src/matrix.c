@@ -1,5 +1,6 @@
 #include "matrix.h"
 #include "lu.h"
+#include "svd.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -7,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <float.h>
 
 Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
   if (nlins == 0 || ncols == 0) {
@@ -98,6 +100,22 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
   return m;
 }
 
+Matrix* matrix_create_identity(unsigned int m, unsigned int n) {
+  Matrix* a = matrix_create_empty(m, n);
+  if (a == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+  for (unsigned int i = 0; i < m; i++) {
+    for (unsigned int j = 0; j < n; j++) {
+      if (i == j) {
+        matrix_set(a, i, j, 1.0);
+      }
+    }
+  }
+  return a;
+}
+
 void matrix_destroy(Matrix* m) {
   if (m != NULL) {
     if (m->columns != NULL) {
@@ -168,6 +186,14 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
   }
 
   return line_vectors;
+}
+
+Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i) {
+  if (a == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+  return &a->columns[i];
 }
 
 /**
@@ -394,6 +420,34 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m) {
   }
 
   return c;
+}
+
+Vector* matrix_mul_vector(const Matrix* m, const Vector* v) {
+  if (m == NULL || m->columns == NULL || v == NULL || v->x == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+
+  if (m->ncols != v->dim) {
+    errno = EMATRIXINVALIDMUL;
+    return NULL;
+  }
+
+  Vector* r = vector_create_empty(m->nlins);
+  if (r == NULL) {
+    errno = EVECTORALLOCATION;
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < m->nlins; i++) {
+    double sum = 0.0;
+    for (unsigned int j = 0; j < m->ncols; j++) {
+      sum += m->columns[j].x[i] * v->x[j];
+    }
+    r->x[i] = sum;
+  }
+
+  return r;
 }
 
 Matrix* matrix_transpose(const Matrix* m) {
@@ -669,6 +723,55 @@ double matrix_determinant(const Matrix* m) {
   }
 
   return sign * product;
+}
+
+double matrix_trace(const Matrix* m) {
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return NAN;
+  }
+
+  if (m->nlins != m->ncols) {
+    errno = EMATRIXINVALIDDIM;
+    return NAN;
+  }
+
+  double trace = 0.0;
+  for (unsigned int i = 0; i < m->nlins; i++) {
+    trace += matrix_get(m, i, i);
+  }
+
+  return trace;
+}
+
+unsigned int matrix_rank(const Matrix* m) {
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return (unsigned int)-1;
+  }
+
+  if (m->nlins == 0 || m->ncols == 0) {
+    errno = EMATRIXINVALIDDIM;
+    return (unsigned int)-1;
+  }
+
+  SVDResult* r = svd_golub_reinsch(m);
+  if (r == NULL) {
+    return (unsigned int)-1;
+  }
+
+  const double tol = (double)(m->nlins > m->ncols ? m->nlins : m->ncols)
+                     * r->sigma->x[0] * DBL_EPSILON;
+
+  unsigned int rank = 0;
+  for (unsigned int j = 0; j < r->sigma->dim; j++) {
+    if (r->sigma->x[j] > tol) {
+      rank++;
+    }
+  }
+
+  svd_destroy(r);
+  return rank;
 }
 
 void matrix_print(const Matrix* m, const char* matrix_label) {
