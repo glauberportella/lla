@@ -118,8 +118,9 @@ int main(void) {
   Vector* linhas = matrix_get_line_vectors(m);
   vector_println(&linhas[0], "Primeira linha de M");
 
-  // Substituicao de coluna: matrix_add_column_vector_at troca a coluna i
-  // pela nova e assume a posse do buffer, por isso ele e alocado com malloc.
+  // Substituicao de coluna: matrix_add_column_vector_at copia os valores
+  // de x para a coluna i e NAO assume a posse do buffer, por isso ele e
+  // liberado aqui no fim do programa.
   double* nova_col = (double*)malloc(3 * sizeof(double));
   for (int i = 0; i < 3; i++) {
     nova_col[i] = 7.0;
@@ -146,6 +147,7 @@ int main(void) {
   matrix_destroy(soma);
   matrix_destroy(m_menos);
   vector_destroy(nova_pos);
+  free(nova_col);
   for (unsigned int i = 0; i < 3; i++) {
     free(linhas[i].x);
   }

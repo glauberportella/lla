@@ -217,7 +217,7 @@ static RefMatrix* ref_from_matrix(const Matrix* m) {
   }
   for (unsigned int i = 0; i < m->nlins; i++) {
     for (unsigned int j = 0; j < m->ncols; j++) {
-      ref_set(r, i, j, m->columns[j].x[i]);
+      ref_set(r, i, j, m->data[(size_t)j * m->nlins + i]);
     }
   }
   return r;
@@ -913,7 +913,8 @@ int main(int argc, char* argv[]) {
   lim_print_bytes((double)n6 * n6 * sizeof(double) * 6.0);
   printf(")\n");
   printf("3 matrizes e o pior caso do produto de matrizes;\n");
-  printf("6 matrizes cobre a inversa (L, U, P, inversa, identidade e auxiliares).\n\n");
+  printf("6 matrizes cobre a inversa com folga: a implementacao atual usa 4\n");
+  printf("(L, U, P e a propria inversa) mais dois vetores auxiliares;\n\n");
 
   LimSummary resumo[LIM_OP_COUNT];
 
