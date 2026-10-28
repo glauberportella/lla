@@ -332,12 +332,11 @@ void test_matrix_create() {
   assert(a != NULL);
   assert(a->nlins == 2);
   assert(a->ncols == 2);
-  assert(a->columns[0].dim == 2);
-  assert(a->columns[1].dim == 2);
-  assert(a->columns[0].x[0] == 1.0);
-  assert(a->columns[0].x[1] == -1.0);
-  assert(a->columns[1].x[0] == -1.0);
-  assert(a->columns[1].x[1] == 1.0);
+  assert(a->data != NULL);
+  assert(matrix_get(a, 0, 0) == 1.0);
+  assert(matrix_get(a, 1, 0) == -1.0);
+  assert(matrix_get(a, 0, 1) == -1.0);
+  assert(matrix_get(a, 1, 1) == 1.0);
 
   matrix_destroy(a);
 }
@@ -366,10 +365,10 @@ void test_matrix_add() {
   Matrix* c = matrix_add(a, b);
   assert(c != NULL);
 
-  assert(c->columns[0].x[0] == 0.0);
-  assert(c->columns[0].x[1] == -1.0);
-  assert(c->columns[1].x[0] == -1.0);
-  assert(c->columns[1].x[1] == 0.0);
+  assert(matrix_get(c, 0, 0) == 0.0);
+  assert(matrix_get(c, 1, 0) == -1.0);
+  assert(matrix_get(c, 0, 1) == -1.0);
+  assert(matrix_get(c, 1, 1) == 0.0);
 
   matrix_destroy(c);
   matrix_destroy(b);
@@ -400,10 +399,10 @@ void test_matrix_sub() {
   Matrix* c = matrix_sub(a, b);
   assert(c != NULL);
 
-  assert(c->columns[0].x[0] == 2.0);
-  assert(c->columns[0].x[1] == -1.0);
-  assert(c->columns[1].x[0] == -1.0);
-  assert(c->columns[1].x[1] == 2.0);
+  assert(matrix_get(c, 0, 0) == 2.0);
+  assert(matrix_get(c, 1, 0) == -1.0);
+  assert(matrix_get(c, 0, 1) == -1.0);
+  assert(matrix_get(c, 1, 1) == 2.0);
 
   matrix_destroy(c);
   matrix_destroy(b);
@@ -427,11 +426,11 @@ void test_matrix_mul_scalar() {
 
   Matrix* b = matrix_mul_scalar(-2.0, a);
   assert(b != NULL);
-  
-  assert(b->columns[0].x[0] == 2.0);
-  assert(b->columns[0].x[1] == 2.0);
-  assert(b->columns[1].x[0] == 2.0);
-  assert(b->columns[1].x[1] == 2.0);
+
+  assert(matrix_get(b, 0, 0) == 2.0);
+  assert(matrix_get(b, 1, 0) == 2.0);
+  assert(matrix_get(b, 0, 1) == 2.0);
+  assert(matrix_get(b, 1, 1) == 2.0);
 
   matrix_println(b, "B = -2A");
 
@@ -1212,8 +1211,8 @@ void test_lsystem_sistema_singular() {
   double rec1 = 0.0;
   double rec2 = 0.0;
   for (unsigned int i = 0; i < 2; i++) {
-    rec1 += a->columns[i].x[0] * x->x[i];
-    rec2 += a->columns[i].x[1] * x->x[i];
+    rec1 += matrix_get(a, 0, i) * x->x[i];
+    rec2 += matrix_get(a, 1, i) * x->x[i];
   }
   assert(fabs(rec1 - 3.0) < 1e-9);
   assert(fabs(rec2 - 6.0) < 1e-9);

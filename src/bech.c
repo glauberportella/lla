@@ -107,7 +107,7 @@ static Matrix* bench_random_matrix(unsigned int n) {
 }
 
 /**
- * Soma dos elementos da matriz, lida direto dos buffers de coluna para nao
+ * Soma dos elementos da matriz, lida direto do bloco denso para nao
  * distorcer a medicao de tempo com o custo da API matrix_get.
  */
 static double bench_matrix_checksum(const Matrix* m) {
@@ -115,12 +115,10 @@ static double bench_matrix_checksum(const Matrix* m) {
     return NAN;
   }
 
+  const size_t total = (size_t)m->nlins * (size_t)m->ncols;
   double acc = 0.0;
-  for (unsigned int j = 0; j < m->ncols; j++) {
-    const double* coluna = m->columns[j].x;
-    for (unsigned int i = 0; i < m->nlins; i++) {
-      acc += coluna[i];
-    }
+  for (size_t k = 0; k < total; k++) {
+    acc += m->data[k];
   }
 
   return acc;

@@ -10,6 +10,24 @@
 #include <math.h>
 #include <float.h>
 
+/*
+ * Convenções internas do layout denso column-major:
+ *
+ *   a(i, j) = m->data[(size_t)j * m->nlins + i]
+ *
+ * Ou seja, cada coluna j é o trecho contíguo
+ *
+ *   m->data + j * nlins   ...   m->data + j * nlins + nlins - 1
+ *
+ * e a linha i tem passo (stride) nlins. O acesso às colunas é contíguo,
+ * o que aproveita bem a cache e permite ao compilador vetorizar os
+ * laços internos das operações.
+ */
+
+static size_t matrix_data_size(const Matrix* m) {
+  return (size_t)m->nlins * (size_t)m->ncols;
+}
+
 Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
   if (nlins == 0 || ncols == 0) {
     errno = EMATRIXALLOCATION;
@@ -24,34 +42,19 @@ Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
 
   m->nlins = nlins;
   m->ncols = ncols;
-  m->columns = (Vector*)calloc(ncols, sizeof(Vector));
+  m->data = (double*)calloc(matrix_data_size(m), sizeof(double));
 
-  if (m->columns == NULL) {
+  if (m->data == NULL) {
     free(m);
     errno = EMATRIXALLOCATION;
     return NULL;
-  }
-
-  for (unsigned int j = 0; j < ncols; j++) {
-    m->columns[j].dim = nlins;
-    m->columns[j].x = (double*)calloc(nlins, sizeof(double));
-
-    if (m->columns[j].x == NULL) {
-      for (unsigned int k = 0; k < j; k++) {
-        free(m->columns[k].x);
-      }
-      free(m->columns);
-      free(m);
-      errno = EMATRIXALLOCATION;
-      return NULL;
-    }
   }
 
   return m;
 }
 
 Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) {
-  if (ncols == 0 || columns == NULL) {
+  if (nlins == 0 || ncols == 0 || columns == NULL) {
     errno = EMATRIXALLOCATION;
     return NULL;
   }
@@ -62,39 +65,25 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
     return NULL;
   }
 
-  m->columns = (Vector*)calloc(ncols, sizeof(Vector));
-  if (m->columns == NULL) {
+  m->nlins = nlins;
+  m->ncols = ncols;
+  m->data = (double*)malloc(matrix_data_size(m) * sizeof(double));
+
+  if (m->data == NULL) {
     free(m);
     errno = EMATRIXALLOCATION;
     return NULL;
   }
-  m->nlins = nlins;
-  m->ncols = ncols;
 
-  for (unsigned int i = 0; i < ncols; i++) {
-    if (columns[i].dim != m->nlins || columns[i].x == NULL) {
-      for (unsigned int j = 0; j < i; j++) {
-        free(m->columns[j].x);
-      }
-      free(m->columns);
+  for (unsigned int j = 0; j < ncols; j++) {
+    if (columns[j].dim != nlins || columns[j].x == NULL) {
+      free(m->data);
       free(m);
       errno = EMATRIXALLOCATION;
       return NULL;
     }
 
-    m->columns[i].dim = columns[i].dim;
-    m->columns[i].x = (double*)malloc(m->columns[i].dim * sizeof(double));
-    if (m->columns[i].x == NULL) {
-      for (unsigned int j = 0; j < i; j++) {
-        free(m->columns[j].x);
-      }
-      free(m->columns);
-      free(m);
-      errno = EMATRIXALLOCATION;
-      return NULL;
-    }
-
-    memcpy(m->columns[i].x, columns[i].x, columns[i].dim * sizeof(double));
+    memcpy(m->data + (size_t)j * nlins, columns[j].x, nlins * sizeof(double));
   }
 
   return m;
@@ -106,26 +95,35 @@ Matrix* matrix_create_identity(unsigned int m, unsigned int n) {
     errno = EMATRIXALLOCATION;
     return NULL;
   }
-  for (unsigned int i = 0; i < m; i++) {
-    for (unsigned int j = 0; j < n; j++) {
-      if (i == j) {
-        matrix_set(a, i, j, 1.0);
-      }
-    }
+
+  const unsigned int diag = (m < n) ? m : n;
+  for (unsigned int i = 0; i < diag; i++) {
+    a->data[(size_t)i * n + i] = 1.0;
   }
+
   return a;
+}
+
+Matrix* matrix_copy(const Matrix* m) {
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
+
+  Matrix* c = matrix_create_empty(m->nlins, m->ncols);
+  if (c == NULL) {
+    errno = EMATRIXALLOCATION;
+    return NULL;
+  }
+
+  memcpy(c->data, m->data, matrix_data_size(m) * sizeof(double));
+
+  return c;
 }
 
 void matrix_destroy(Matrix* m) {
   if (m != NULL) {
-    if (m->columns != NULL) {
-      for (unsigned int i = 0; i < m->ncols; i++) {
-        if (m->columns[i].x != NULL) {
-          free(m->columns[i].x);
-        }
-      }
-      free(m->columns);
-    }
+    free(m->data);
     free(m);
   }
 }
@@ -155,11 +153,6 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
     return NULL;
   }
 
-  if (a->columns == NULL) {
-    errno = EVECTORNULL;
-    return NULL;
-  }
-
   Vector* line_vectors = (Vector*)calloc(a->nlins, sizeof(Vector));
   if (line_vectors == NULL) {
     errno = EVECTORALLOCATION;
@@ -181,7 +174,7 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
     }
 
     for (unsigned int i = 0; i < a->ncols; i++) {
-      line_vectors[j].x[i] = a->columns[i].x[j];
+      line_vectors[j].x[i] = a->data[(size_t)i * a->nlins + j];
     }
   }
 
@@ -193,28 +186,17 @@ Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i) {
     errno = EMATRIXNULL;
     return NULL;
   }
-  return &a->columns[i];
-}
 
-/**
- * Libera um conjunto de vetores linha devolvido por matrix_get_line_vectors.
- */
-static void matrix_free_line_vectors(Vector* line_vectors, const unsigned int n) {
-  if (line_vectors == NULL) {
-    return;
+  if (i >= a->ncols) {
+    errno = EMATRIXINVALIDCOLINDEX;
+    return NULL;
   }
 
-  for (unsigned int i = 0; i < n; i++) {
-    if (line_vectors[i].x != NULL) {
-      free(line_vectors[i].x);
-    }
-  }
-
-  free(line_vectors);
+  return vector_create(a->nlins, a->data + (size_t)i * a->nlins);
 }
 
 Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const double aij) {
-  if (m == NULL || m->columns == NULL) {
+  if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return NULL;
   }
@@ -224,16 +206,13 @@ Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const 
     return NULL;
   }
 
-  Vector* column_vector = &m->columns[j];
-  if (column_vector != NULL) {
-    column_vector->x[i] = aij;
-  }
+  m->data[(size_t)j * m->nlins + i] = aij;
 
   return m;
 }
 
 double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
-  if (m == NULL || m->columns == NULL) {
+  if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return NAN;
   }
@@ -243,16 +222,14 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
     return NAN;
   }
 
-  Vector* column_vector = &m->columns[j];
-  if (column_vector == NULL) {
-    return NAN;
-  }
-
-  return column_vector->x[i];
+  return m->data[(size_t)j * m->nlins + i];
 }
 
 Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_index) {
-  unsigned int i, j;
+  if (m == NULL) {
+    errno = EMATRIXNULL;
+    return NULL;
+  }
 
   if (column_index > m->ncols - 1) {
     errno = EMATRIXINVALIDCOLINDEX;
@@ -265,26 +242,27 @@ Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_inde
     return NULL;
   }
 
-  for (i = 0, j = 0; i < m->ncols; i++) {
-     if (i == column_index) {
-       j = i;
-       continue;
-     }
-     memcpy(n->columns[j].x, m->columns[i].x, m->nlins * sizeof(double));
-     j++;
+  const size_t col_bytes = m->nlins * sizeof(double);
+  double* dest = n->data;
+  for (unsigned int i = 0; i < m->ncols; i++) {
+    if (i == column_index) {
+      continue;
+    }
+    memcpy(dest, m->data + (size_t)i * m->nlins, col_bytes);
+    dest += m->nlins;
   }
 
   return n;
 }
 
 /**
- * Substitui o vetor coluna de indice i pelo vetor x.
+ * Substitui os valores da coluna de indice i pelos xlen valores de x.
  *
- * A funcao assume a posse de x, ou seja, x nao pode ser liberado pelo
- * chamador. O buffer anterior da coluna e liberado internamente.
+ * Os valores sao COPIADOS para dentro do bloco da matriz; o chamador
+ * continua responsavel por liberar x.
  */
 void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x) {
-  if (m == NULL || m->columns == NULL) {
+  if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return;
   }
@@ -299,16 +277,12 @@ void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, d
     return;
   }
 
-  Vector vector = {
-    .dim = xlen,
-    .x = x
-  };
-
-  if (m->columns[i].x != NULL) {
-    free(m->columns[i].x);
+  if (xlen != m->nlins) {
+    errno = EINVALIDDIM;
+    return;
   }
 
-  m->columns[i] = vector;
+  memcpy(m->data + (size_t)i * m->nlins, x, xlen * sizeof(double));
 }
 
 Matrix* matrix_add(const Matrix* a, const Matrix* b) {
@@ -328,13 +302,13 @@ Matrix* matrix_add(const Matrix* a, const Matrix* b) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
-      double aij = matrix_get(a, i, j);
-      double bij = matrix_get(b, i, j);
-      double cij = aij + bij;
-      matrix_set(c, i, j, cij);
-    }
+  const size_t total = matrix_data_size(a);
+  const double* restrict pa = a->data;
+  const double* restrict pb = b->data;
+  double* restrict pc = c->data;
+
+  for (size_t k = 0; k < total; k++) {
+    pc[k] = pa[k] + pb[k];
   }
 
   return c;
@@ -357,17 +331,30 @@ Matrix* matrix_sub(const Matrix* a, const Matrix* b) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
-      double aij = matrix_get(a, i, j);
-      double bij = matrix_get(b, i, j);
-      matrix_set(c, i, j, aij - bij);
-    }
+  const size_t total = matrix_data_size(a);
+  const double* restrict pa = a->data;
+  const double* restrict pb = b->data;
+  double* restrict pc = c->data;
+
+  for (size_t k = 0; k < total; k++) {
+    pc[k] = pa[k] - pb[k];
   }
 
   return c;
 }
 
+/*
+ * Produto C = A * B em laço j -> k -> i (saxpy por colunas de C):
+ *
+ *   para cada coluna j de C:
+ *     C_col_j = 0
+ *     para k: C_col_j += A_col_k * b(k, j)
+ *
+ * Com column-major, C_col_j, A_col_k e o elemento b(k, j) são acessados
+ * de forma contígua, e o laço interno (sobre i) é vetorizado pelo
+ * compilador. Se três streams simultâneos não bastarem, o OpenMP é
+ * compilado no paralelismo sobre j quando o build usa OPENMP=1.
+ */
 Matrix* matrix_mul(const Matrix* a, const Matrix* b) {
   if (a == NULL || b == NULL) {
     errno = EMATRIXNULL;
@@ -385,15 +372,29 @@ Matrix* matrix_mul(const Matrix* a, const Matrix* b) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < b->ncols; j++) {
-      double cij = 0.0;
-      for (unsigned int k = 0; k < a->ncols; k++) {
-        double aik = matrix_get(a, i, k);
-        double bkj = matrix_get(b, k, j);
-        cij += aik * bkj;
+  const unsigned int M = a->nlins; // linhas de A e de C
+  const unsigned int K = a->ncols; // colunas de A == linhas de B
+  const unsigned int N = b->ncols; // colunas de B e de C
+
+  const double* restrict pa = a->data;
+  const double* restrict pb = b->data;
+  double* restrict pc = c->data;
+
+#ifdef LLA_OPENMP
+#pragma omp parallel for
+#endif
+  for (unsigned int j = 0; j < N; j++) {
+    double* restrict cj = pc + (size_t)j * M;
+    const double* restrict bj = pb + (size_t)j * K; // coluna j de B, contígua
+    for (unsigned int i = 0; i < M; i++) {
+      cj[i] = 0.0;
+    }
+    for (unsigned int k = 0; k < K; k++) {
+      const double bkj = bj[k];
+      const double* restrict ak = pa + (size_t)k * M;
+      for (unsigned int i = 0; i < M; i++) {
+        cj[i] += ak[i] * bkj;
       }
-      matrix_set(c, i, j, cij);
     }
   }
 
@@ -412,18 +413,19 @@ Matrix* matrix_mul_scalar(const double scalar, const Matrix* m) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < m->nlins; i++) {
-    for (unsigned int j = 0; j < m->ncols; j++) {
-      double cij = scalar * matrix_get(m, i, j);
-      matrix_set(c, i, j, cij);
-    }
+  const size_t total = matrix_data_size(m);
+  const double* restrict pm = m->data;
+  double* restrict pc = c->data;
+
+  for (size_t k = 0; k < total; k++) {
+    pc[k] = scalar * pm[k];
   }
 
   return c;
 }
 
 Vector* matrix_mul_vector(const Matrix* m, const Vector* v) {
-  if (m == NULL || m->columns == NULL || v == NULL || v->x == NULL) {
+  if (m == NULL || m->data == NULL || v == NULL || v->x == NULL) {
     errno = EMATRIXNULL;
     return NULL;
   }
@@ -439,12 +441,19 @@ Vector* matrix_mul_vector(const Matrix* m, const Vector* v) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < m->nlins; i++) {
-    double sum = 0.0;
-    for (unsigned int j = 0; j < m->ncols; j++) {
-      sum += m->columns[j].x[i] * v->x[j];
+  // r = soma_j v[j] * col_j, com cada coluna lida de forma contígua.
+  const unsigned int nr = m->nlins;
+  double* restrict pr = r->x;
+
+  for (unsigned int j = 0; j < m->ncols; j++) {
+    const double coef = v->x[j];
+    if (coef == 0.0) {
+      continue;
     }
-    r->x[i] = sum;
+    const double* restrict col = m->data + (size_t)j * nr;
+    for (unsigned int i = 0; i < nr; i++) {
+      pr[i] += coef * col[i];
+    }
   }
 
   return r;
@@ -456,21 +465,75 @@ Matrix* matrix_transpose(const Matrix* m) {
     return NULL;
   }
 
-  Vector* line_vectors = matrix_get_line_vectors(m);
-  if (line_vectors == NULL) {
-    return NULL;
-  }
-
-  Matrix* t = matrix_create(m->ncols, m->nlins, line_vectors);
-
-  matrix_free_line_vectors(line_vectors, m->nlins);
-
+  Matrix* t = matrix_create_empty(m->ncols, m->nlins);
   if (t == NULL) {
     errno = EMATRIXALLOCATION;
     return NULL;
   }
 
+  // t(j, i) = m(i, j): lê colunas de m (contíguo) e escreve as linhas de t.
+  const unsigned int nr = m->nlins;
+  const unsigned int nc = m->ncols;
+  const double* restrict pm = m->data;
+  double* restrict pt = t->data;
+
+  for (unsigned int i = 0; i < nc; i++) {
+    const double* restrict col = pm + (size_t)i * nr;
+    for (unsigned int j = 0; j < nr; j++) {
+      pt[(size_t)j * nc + i] = col[j];
+    }
+  }
+
   return t;
+}
+
+/**
+ * Substituição direta in-place: resolve L * y = pb, com L triangular
+ * inferior de diagonal unitária, atualizando o vetor y (saxpy por colunas,
+ * com as colunas de L lidas de forma contígua).
+ */
+static void matrix_lu_forward_update(double* restrict y, const Matrix* restrict l, unsigned int n) {
+  for (unsigned int j = 0; j < n; j++) {
+    const double yj = y[j];
+    if (yj == 0.0) {
+      continue;
+    }
+    const double* restrict col = l->data + (size_t)j * n;
+    for (unsigned int i = j + 1; i < n; i++) {
+      y[i] -= col[i] * yj;
+    }
+  }
+}
+
+/**
+ * Substituição retroativa: resolve U * x = y, com U triangular superior,
+ * usando a forma por colunas (x[j] = y[j] / u_jj seguida da correção de
+ * y[i], i < j, com a coluna j de U lida de forma contígua).
+ */
+static int matrix_lu_back_solve(double* restrict x, double* restrict y, const Matrix* restrict u, unsigned int n) {
+  for (int jj = (int)n - 1; jj >= 0; jj--) {
+    const unsigned int j = (unsigned int)jj;
+    const double pivot = u->data[(size_t)j * n + j];
+
+    if (fabs(pivot) < 1e-9) {
+      errno = EMATRIXSINGULAR;
+      return -1;
+    }
+
+    const double xj = y[j] / pivot;
+    x[j] = xj;
+
+    if (xj == 0.0) {
+      continue;
+    }
+
+    const double* restrict col = u->data + (size_t)j * n;
+    for (unsigned int i = 0; i < j; i++) {
+      y[i] -= col[i] * xj;
+    }
+  }
+
+  return 0;
 }
 
 Matrix* matrix_inverse(const Matrix* m) {
@@ -478,26 +541,20 @@ Matrix* matrix_inverse(const Matrix* m) {
   Entrada: Matrizes L, U, P de tamanho n x n (onde PA = LU)
   Saída: Matriz A_inv (inversa de A)
 
-  1. Inicializar A_inv como uma matriz vazia de tamanho n x n.
-  2. Criar a matriz Identidade I de tamanho n x n.
+  1. Decompor via LU: P * A = L * U (o vetor de pivôs registra a permutação).
+  2. Para cada coluna i da inversa:
+     a. montar b = P * e_i a partir do vetor de pivôs (b[k] = 1 se e só se
+        a linha k de A foi movida para a posição k de P; nenhum produto
+        matricial é preciso);
+     b. [Substituição Direta] Resolver L * y = b por colunas de L;
+     c. [Substituição Retroativa] Resolver U * x = y por colunas de U;
+     d. copiar x como a i-ésima coluna de A_inv (A_inv[:, i] = x).
+  3. Retornar A_inv.
 
-  3. Para cada coluna i de 1 até n:
-     a. Obter a i-ésima coluna de I, chamada e_i.
-     b. Aplicar a permutação: b = P * e_i (apenas rearranja as linhas do vetor e_i).
-     
-     c. [Substituição Direta] Resolver L * y = b:
-        Para k de 1 até n:
-          y[k] = b[k] - (soma de L[k][j] * y[j] para j de 1 até k-1)
-          // Nota: L[k][k] é sempre 1 na decomposição LU padrão, 
-          // caso contrário, dividiria o resultado por L[k][k].
-          
-     d. [Substituição Retroativa] Resolver U * x = y:
-        Para k de n decrescendo até 1:
-          x[k] = (y[k] - (soma de U[k][j] * x[j] para j de k+1 até n)) / U[k][k]
-          
-     e. Salvar o vetor x como a i-ésima coluna de A_inv (A_inv[:, i] = x).
-
-  4. Retornar A_inv.
+  Trata-se da mesma matemática da versão anterior, mas sem construir a
+  matriz identidade, sem criar matrizes n x 1 por coluna e sem multiplicações
+  por P: o custo dominante são as n substituições O(n^2), que é o custo
+  teórico mínimo da inversa.
   */
 
   if (m == NULL) {
@@ -513,167 +570,75 @@ Matrix* matrix_inverse(const Matrix* m) {
   // Decomposição LU
   LU* lu = lu_create_decomposition(m);
   if (lu == NULL) {
-    // Preservando o tratamento de erro original
+    // lu_create_decomposition já define o errno apropriado
     return NULL;
   }
 
-  unsigned int i, j;
   unsigned int n = m->nlins;
 
-  // Inversa a ser retornada
+  // A inversa a ser retornada
   Matrix* inv = matrix_create_empty(n, n);
   if (inv == NULL) {
     lu_destroy(lu);
+    errno = EMATRIXALLOCATION;
     return NULL;
   }
 
-  // Identidade
-  Matrix* id = matrix_create_empty(n, n);
-  if (id == NULL) {
+  double* y = (double*)malloc(n * sizeof(double));
+  if (y == NULL) {
     matrix_destroy(inv);
     lu_destroy(lu);
+    errno = EMATRIXALLOCATION;
     return NULL;
   }
 
-  // Identidade (inv ja vem zerada de matrix_create_empty)
-  for (i = 0; i < n; i++) {
-    matrix_set(id, i, i, 1.0);
-  }
+  const Matrix* l = lu->l;
+  const Matrix* u = lu->u;
+  const int* restrict piv = lu->piv;
+  int failed = 0;
 
-  // Loop principal para cada coluna i da inversa
-  for (i = 0; i < n; i++) {
-    // e_i = i-ésima coluna de I
-    Matrix* ei = matrix_create(n, 1, &id->columns[i]);
-    if (ei == NULL) {
-      matrix_destroy(inv);
-      matrix_destroy(id);
-      lu_destroy(lu);
-      return NULL;
-    }
-
-    // aplica permutação b = P * e_i
-    Matrix* b = matrix_mul(lu->p, ei);
-    if (b == NULL) {
-      matrix_destroy(ei);
-      matrix_destroy(inv);
-      matrix_destroy(id);
-      lu_destroy(lu);
-      return NULL;
-    }
-
-    // calloc já inicializa com zero, não precisa de loop extra
-    double* y = (double*)calloc(n, sizeof(double));
-    if (y == NULL) {
-      matrix_destroy(b);
-      matrix_destroy(ei);
-      matrix_destroy(inv);
-      matrix_destroy(id);
-      lu_destroy(lu);
-      errno = EVECTORALLOCATION;
-      return NULL;
-    }
-
-    // Substituição direta - resolver Ly = b
+  for (unsigned int i = 0; i < n && !failed; i++) {
+    // b = P * e_i: 1 na linha cujo pivô aponta para a coluna i
     for (unsigned int k = 0; k < n; k++) {
-      double soma_ly = 0.0;
-      for (j = 0; j < k; j++) { // CORRIGIDO: j < k para ir até k-1
-        soma_ly += matrix_get(lu->l, k, j) * y[j];
-      }
-      // CORRIGIDO: O índice da coluna de b é 0, pois b é n x 1
-      y[k] = matrix_get(b, k, 0) - soma_ly;
+      y[k] = (piv[k] == (int)i) ? 1.0 : 0.0;
     }
 
-    double* x = (double*)calloc(n, sizeof(double));
-    if (x == NULL) {
-      free(y);
-      matrix_destroy(b);
-      matrix_destroy(ei);
-      matrix_destroy(inv);
-      matrix_destroy(id);
-      lu_destroy(lu);
-      errno = EVECTORALLOCATION;
-      return NULL;
+    // L * y = b, com L de diagonal unitária (só as atualizações)
+    matrix_lu_forward_update(y, l, n);
+
+    // U * x = y
+    double* x = inv->data + (size_t)i * n;
+    if (matrix_lu_back_solve(x, y, u, n) != 0) {
+      failed = 1;
     }
-
-    // Substituição retroativa - resolver Ux = y
-    // CORRIGIDO: Cast para int para evitar estouro negativo com unsigned int
-    for (int k = (int)n - 1; k >= 0; k--) {
-      double soma_ux = 0.0;
-      // CORRIGIDO: Varre de k+1 até n, sem embutir a divisão dentro do laço
-      for (j = (unsigned int)k + 1; j < n; j++) {
-        soma_ux += matrix_get(lu->u, (unsigned int)k, j) * x[j];
-      }
-
-      double ukk = matrix_get(lu->u, (unsigned int)k, (unsigned int)k);
-      // Proteção contra divisão por zero em matrizes não invertíveis
-      if (fabs(ukk) < 1e-9) {
-        free(y);
-        free(x);
-        matrix_destroy(b);
-        matrix_destroy(ei);
-        matrix_destroy(inv);
-        matrix_destroy(id);
-        lu_destroy(lu);
-        errno = EMATRIXSINGULAR;
-        return NULL;
-      }
-      x[k] = (y[k] - soma_ux) / ukk;
-    }
-
-    // Salvar o vetor x como i-ésima coluna da inv.
-    // matrix_add_column_vector_at assume a posse de x e libera o buffer
-    // anterior da coluna, evitando vazamento.
-    matrix_add_column_vector_at(inv, i, n, x);
-
-    // CORRIGIDO: Liberar a memória dos objetos criados NESTA iteração do loop
-    free(y);
-    matrix_destroy(b);
-    matrix_destroy(ei);
   }
 
-  // Limpeza final de memória
-  matrix_destroy(id);
+  free(y);
   lu_destroy(lu);
+
+  if (failed) {
+    matrix_destroy(inv);
+    return NULL;
+  }
 
   return inv;
 }
 
 /**
- * Calcula o sinal da permutacao representada pela matriz P.
+ * Calcula o sinal da permutacao registrada no vetor de pivots do LU.
  *
- * Retorna 1 para permutacao par, -1 para permutacao impar e 0 em caso de
- * falha de alocacao.
+ * Retorna 1 para permutacao par e -1 para permutacao impar.
  */
-static int matrix_permutation_sign(const Matrix* p) {
-  const unsigned int n = p->nlins;
-
-  unsigned int* perm = (unsigned int*)calloc(n, sizeof(unsigned int));
-  if (perm == NULL) {
-    errno = EMATRIXALLOCATION;
-    return 0;
-  }
-
-  // P[i][perm[i]] = 1, logo perm[i] e a coluna do unico elemento nao nulo da linha i
-  for (unsigned int i = 0; i < n; i++) {
-    for (unsigned int j = 0; j < n; j++) {
-      if (matrix_get(p, i, j) != 0.0) {
-        perm[i] = j;
-        break;
-      }
-    }
-  }
-
+static int matrix_permutation_sign(const int* restrict piv, const unsigned int n) {
   // O sinal da permutacao e (-1) elevado ao numero de inversoes
   unsigned long inversions = 0;
   for (unsigned int i = 0; i < n; i++) {
     for (unsigned int j = i + 1; j < n; j++) {
-      if (perm[i] > perm[j]) {
+      if (piv[i] > piv[j]) {
         inversions++;
       }
     }
   }
-
-  free(perm);
 
   return (inversions % 2 == 0) ? 1 : -1;
 }
@@ -709,18 +674,14 @@ double matrix_determinant(const Matrix* m) {
    * ja que L tem a diagonal unitaria (det(L) = 1).
    */
   double product = 1.0;
+  const double* restrict du = lu->u->data;
   for (unsigned int i = 0; i < n; i++) {
-    product *= matrix_get(lu->u, i, i);
+    product *= du[(size_t)i * n + i];
   }
 
-  const int sign = matrix_permutation_sign(lu->p);
+  const int sign = matrix_permutation_sign(lu->piv, n);
 
   lu_destroy(lu);
-
-  if (sign == 0) {
-    errno = EMATRIXINVALIDDETERMINANT;
-    return NAN;
-  }
 
   return sign * product;
 }
@@ -738,7 +699,7 @@ double matrix_trace(const Matrix* m) {
 
   double trace = 0.0;
   for (unsigned int i = 0; i < m->nlins; i++) {
-    trace += matrix_get(m, i, i);
+    trace += m->data[(size_t)i * m->nlins + i];
   }
 
   return trace;
@@ -775,7 +736,7 @@ unsigned int matrix_rank(const Matrix* m) {
 }
 
 void matrix_print(const Matrix* m, const char* matrix_label) {
-  if (m == NULL || m->columns == NULL) {
+  if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     fprintf(stderr, "==> ERRO: EMATRIXNULL");
     return;
@@ -798,7 +759,7 @@ void matrix_print(const Matrix* m, const char* matrix_label) {
     printf("| ");
 
     for (unsigned int j = 0; j < m->ncols; j++) {
-      printf("%.2f ", m->columns[j].x[i]);
+      printf("%.2f ", m->data[(size_t)j * m->nlins + i]);
     }
 
     printf("|\n");

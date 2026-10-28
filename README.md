@@ -4,7 +4,7 @@ Biblioteca pequena em C para operações de álgebra linear com vetores e matriz
 
 O objetivo é manter o código simples, sem dependências externas além da biblioteca padrão do C, e fácil de incorporar em outros projetos.
 
-Por ser um projeto recreativo, a biblioteca prioriza clareza sobre desempenho bruto. Na prática isso significa que as matrizes são guardadas como vetores coluna, com uma alocação por coluna, e que todo acesso valida os índices — o que torna as operações O(n³) (produto, LU, determinante, inversa) bem mais lentas do que uma implementação otimizada. A seção [Limites de dimensão](#limites-de-dimensão) traz os números concretos: em resumo, matrizes de até algumas centenas de linhas são tranquilamente usáveis, e a partir de ~1000 as operações cúbicas começam a ficar pesadas.
+Por ser um projeto recreativo, a biblioteca prioriza clareza sobre desempenho bruto. A partir da versão 0.3.0 as matrizes são guardadas em um **único bloco contíguo de doubles** (formato column-major), uma alocação por matriz, e as operações acessam o bloco diretamente por ponteiros — a validação de índices acontece só na API pública (`matrix_get`/`matrix_set`). A seção [Limites de dimensão](#limites-de-dimensão) traz os números concretos: em resumo, matrizes de até algumas centenas de linhas são instantâneas, e as operações cúbicas (produto, LU, determinante, inversa) ficam viáveis até n ≈ 2000.
 
 ## Estrutura
 
@@ -37,8 +37,11 @@ make lim-run    # compila e executa a busca de limites
 make libs       # gera liblla.a e liblla.so
 make static     # gera apenas a biblioteca estática liblla.a
 make shared     # gera apenas a biblioteca compartilhada liblla.so
+make OPENMP=1 ...   # paraleliza matrix_mul com OpenMP (qualquer alvo)
 make clean      # remove os executáveis e as bibliotecas
 ```
+
+O build padrão usa `-O2 -g -Wall -Wextra -Werror` — qualquer aviso interrompe a compilação. Com `make OPENMP=1` (por exemplo, `make OPENMP=1 bench-run`), o produto matricial é paralelizado com OpenMP sobre as colunas do resultado: não muda o comportamento do build padrão, só adiciona `-fopenmp` e mais desempenho em máquinas multi-core.
 
 ## Biblioteca estática e compartilhada
 
@@ -58,7 +61,7 @@ cc -Isrc meu_app.c -llla -lm
 cc -Isrc meu_app.c -llla -lm -Wl,-rpath,/home/user/lla
 ```
 
-O build usa `-Wall -Wextra -Werror`, então qualquer aviso interrompe a compilação.
+O build usa `-O2 -g -Wall -Wextra -Werror`, então qualquer aviso interrompe a compilação.
 
 ## Benchmark
 
@@ -108,35 +111,58 @@ em um `double` (cresce exponencialmente com n) e passa a devolver `inf`.
 
 ### Números medidos
 
-Medidos com `./lim 10` (orçamento de 10 s por execução) em um Mac com 8 GB de
-memória, com matrizes quadradas aleatórias e diagonalmente dominantes. Os
-valores dependem do hardware e do orçamento de tempo, mas a ordem de grandeza
-é a mesma em qualquer máquina moderna:
+Medidos com `./lim 10` (orçamento de 10 s por execução) em um Xeon E5-2695 v4
+de 16 núcleos com 30 GB de memória, gcc 15.2.0 e `-O2`, com matrizes
+quadradas aleatórias e diagonalmente dominantes. Os valores dependem do
+hardware e do orçamento de tempo, mas a ordem de grandeza é a mesma em
+qualquer máquina moderna:
 
 | Operação | Maior `n` | Tempo em `n` | Limite |
 | --- | --- | --- | --- |
-| `matrix_transpose` | 8192 | 1,4 s | memória |
-| `matrix_add` | 8192 | 6,4 s | memória |
-| `matrix_sub` | 8192 | 8,0 s | memória |
-| `matrix_mul_scalar` | 8192 | 3,4 s | memória |
-| `matrix_mul` | 512 | 5,1 s | tempo |
-| `lu_create_decomposition` | 512 | 2,8 s | tempo |
-| `matrix_determinant` | 512 | 2,8 s | tempo |
-| `matrix_inverse` | 256 | 1,5 s | tempo |
+| `matrix_add` | 16384 | 1,8 s | memória |
+| `matrix_sub` | 16384 | 1,8 s | memória |
+| `matrix_mul_scalar` | 16384 | 1,7 s | memória |
+| `matrix_transpose` | 8192 | 2,5 s | tempo |
+| `matrix_mul` | 2048 | 8,6 s | tempo |
+| `lu_create_decomposition` | 2048 | 2,3 s | tempo |
+| `matrix_determinant` | 2048 | 2,3 s | tempo |
+| `matrix_inverse` | 2048 | 6,7 s | tempo |
 
 Em todos esses tamanhos o resultado foi conferido contra uma implementação de
-referência independente e confere (erro relativo da ordem de `1e-15` para LU
+referência independente e confere (erro relativo da ordem de `1e-14` para LU
 e inversa, zero para as operações exatas). O limite é de tempo e de memória,
 não de correção.
 
-**Limite de memória.** A biblioteca aloca uma matriz `n x n` como `n` vetores
-coluna, ou seja, `n` alocações separadas:
+**Antes e depois (v0.2.0 → v0.3.0, mesma máquina).** Os três gargalos da
+versão anterior eram: uma alocação por coluna (uma matriz `n x n` era
+`n` alocações), validação de índice a cada acesso dentro dos laços e o
+producto em laço `i -> j -> k` com acesso não contíguo. Com o bloco denso,
+acesso direto por ponteiros e o produto reordenado (`j -> k -> i`, saxpy por
+colunas), em `n = 200`:
+
+| Operação | v0.2.0 | v0.3.0 | Aceleração |
+| --- | --- | --- | --- |
+| `matrix_mul` | 190 ms | 5,8 ms | 33× |
+| `matrix_add` | 1,95 ms | 0,10 ms | 19× |
+| `matrix_sub` | 1,85 ms | 0,10 ms | 18× |
+| `matrix_mul_scalar` | 1,31 ms | 0,093 ms | 14× |
+| `matrix_transpose` | 0,69 ms | 0,11 ms | 6,6× |
+| `lu_create_decomposition` | 99 ms | 1,7 ms | 57× |
+| `matrix_determinant` | 95 ms | 1,7 ms | 57× |
+| `matrix_inverse` | 415 ms | 5,4 ms | 77× |
+
+Além do ganho por operação, o produto matricial passou de ~80 para ~2800
+MFLOP/s em `n = 512`, e os limites do `lim` subiram de `n = 512` (produto,
+LU, determinante) e `n = 256` (inversa) para `n = 2048` em todos eles.
+
+**Limite de memória.** A biblioteca aloca uma matriz `n x n` como **um único
+bloco contíguo** de `n*n` doubles — uma alocação por matriz:
 
 | Alocação | Maior `n` | Tamanho |
 | --- | --- | --- |
-| 1 matriz | 16384 | 2,00 GB |
-| 3 matrizes (pior caso de `matrix_mul`) | 8192 | 1,50 GB |
-| 6 matrizes (pior caso de `matrix_inverse`) | 8192 | 3,00 GB |
+| 1 matriz | 32768 | 8,00 GB |
+| 3 matrizes (pior caso de `matrix_mul`) | 16384 | 6,00 GB |
+| 6 matrizes (folga da sonda; a inversa usa 4) | 16384 | 12,00 GB |
 
 Quando a memória acaba, a biblioteca falha de forma graciosa: as funções
 devolvem `NULL` com `errno = EMATRIXALLOCATION`.
@@ -150,12 +176,12 @@ matrizes aleatórias desse tipo. Acima disso `matrix_determinant` devolve
 
 | `n` | Comportamento |
 | --- | --- |
-| até 50 | instantâneo, incluindo `matrix_inverse` |
-| 50 a 500 | confortável para as operações cúbicas (segundos) |
-| 500 a 1000 | `matrix_mul`, LU, determinante e inversa levam de segundos a dezenas de segundos |
-| acima de 1000 | inviável para as operações cúbicas; as operações lineares e quadráticas continuam bem |
+| até 100 | instantâneo, incluindo `matrix_inverse` |
+| 100 a 500 | confortável para as operações cúbicas (milissegundos) |
+| 500 a 2000 | `matrix_mul`, LU, determinante e inversa levam de segundos a dezenas de segundos |
+| acima de 2000 | inviável para as operações cúbicas; as operações lineares e quadráticas continuam bem até onde a memória deixar |
 
-Para uso recreativo, a faixa de 10 a 200 linhas cobre com folga o que se faz
+Para uso recreativo, a faixa de 10 a 500 linhas cobre com folga o que se faz
 com álgebra linear na prática, e é onde a biblioteca se comporta melhor.
 
 ## Tipos
@@ -171,11 +197,12 @@ typedef struct vector_rn_t {
 
 ### Matrix
 
-A matriz é armazenada como um conjunto de vetores coluna.
+A matriz é armazenada em um único bloco contíguo de doubles, no formato
+column-major: `a(i, j)` fica em `data[j * nlins + i]`.
 
 ```c
 typedef struct matrix_rn_t {
-  Vector* columns;    // vetores coluna
+  double*      data;  // bloco contíguo column-major
   unsigned int nlins; // número de linhas
   unsigned int ncols; // número de colunas
 } Matrix;
@@ -263,6 +290,8 @@ vector_destroy(resultado);
 | --- | --- |
 | `matrix_create_empty(m, n)` | Cria uma matriz `m x n` zerada |
 | `matrix_create(m, n, columns)` | Cria uma matriz `m x n` copiando os vetores coluna informados |
+| `matrix_create_identity(m, n)` | Cria a matriz identidade `m x n` |
+| `matrix_copy(a)` | Retorna uma cópia profunda da matriz |
 | `matrix_destroy(m)` | Libera a memória da matriz |
 | `matrix_get(m, i, j)` | Retorna o elemento `a(i,j)` |
 | `matrix_set(m, i, j, v)` | Define o elemento `a(i,j)` e retorna a própria matriz |
@@ -284,6 +313,12 @@ definido) para matriz nula, matriz não quadrada ou falha de alocação. Para
 matrizes grandes o determinante pode estourar a faixa finita do `double` e o
 retorno é `inf` — ver [Limites de dimensão](#limites-de-dimensão).
 
+`matrix_add_column_vector_at(m, i, xlen, x)` **copia** os `xlen` valores de
+`x` para a coluna `i` (desde a v0.3.0 não assume mais a posse do buffer —
+o chamador continua responsável por liberá-lo, e `xlen` precisa ser igual ao
+número de linhas). `matrix_get_vector_column_at` também mudou: devolve uma
+**cópia** da coluna como um novo `Vector`, a liberar com `vector_destroy`.
+
 Toda função que retorna um novo `Vector*` ou `Matrix*` aloca memória, que deve ser liberada pelo chamador com `vector_destroy` ou `matrix_destroy`.
 
 ### Decomposição LU (`lu.h`)
@@ -293,13 +328,14 @@ Toda função que retorna um novo `Vector*` ou `Matrix*` aloca memória, que dev
 | `lu_create_decomposition(a)` | Retorna a decomposição LU de `a` (matriz quadrada) ou `NULL` com `errno` |
 | `lu_destroy(lu)` | Libera a memória da decomposição |
 
-O resultado é um `LU` com três matrizes:
+O resultado é um `LU` com as três matrizes e o vetor de permutação:
 
 ```c
 typedef struct LU_t {
-  Matrix* l; // triangular inferior, diagonal unitária
-  Matrix* u; // triangular superior
-  Matrix* p; // permutação
+  Matrix* l;   // triangular inferior, diagonal unitária
+  Matrix* u;   // triangular superior
+  Matrix* p;   // permutação
+  int*    piv; // piv[i] = coluna do 1 na linha i de P (a permutação em vetor)
 } LU;
 ```
 
@@ -527,7 +563,7 @@ códigos abaixo:
 ## Próximos passos
 
 - Separar os testes do executável principal
-- Reduzir o overhead das operações internas (validação de índice a cada
-  acesso e alocação por coluna), o que ampliaria os limites de dimensão
-  descritos em [Limites de dimensão](#limites-de-dimensão)
+- Aproveitar a faixa ampliada (n até ~2000) como base das próximas
+  bibliotecas: estatística (`lstat`), probabilidade (`lprob`) e
+  machine learning (`lml`)
 

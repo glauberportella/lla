@@ -1,6 +1,13 @@
 CC      ?= gcc
-CFLAGS  ?= -g -Wall -Wextra -Werror -Isrc
+CFLAGS  ?= -O2 -g -Wall -Wextra -Werror -Isrc
 LDLIBS  ?= -lm
+
+# make OPENMP=1: paraleliza o produto matricial (e as operações por coluna)
+# com OpenMP. Não muda o comportamento do build padrão.
+ifeq ($(OPENMP),1)
+  CFLAGS += -fopenmp -DLLA_OPENMP
+  LDLIBS += -lm -lpthread
+endif
 
 LIB_SRC = src/vector.c src/matrix.c src/lu.c src/svd.c src/lsystem.c
 LIB_NAME = lla

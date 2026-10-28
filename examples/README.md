@@ -37,8 +37,9 @@ make 04_decomposicao_lu && ./04_decomposicao_lu
 - **Memoria**: `matrix_create` copia os dados recebidos, mas o resultado de
   `matrix_get_line_vectors` tem de ser liberado pelo chamador (os `x` de cada
   linha e o array em si). Veja `02_matrizes.c`.
-- **Posse**: `matrix_add_column_vector_at` assume a posse do buffer passado,
-  por isso o buffer e alocado com `malloc`. As funcoes de SVD em etapas assumem
+- **Posse**: `matrix_add_column_vector_at` copia os valores do buffer passado,
+  que continua sendo responsabilidade do chamador (o exemplo o libera com
+  `free`). As funcoes de SVD em etapas assumem
   a-posse do resultado intermediario, que deve sempre ir para o destrutor
   correspondente. Veja `07_svd.c`.
 - **Erros**: toda funcao que devolve ponteiro retorna `NULL` com `errno`
