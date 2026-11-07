@@ -41,7 +41,7 @@
 #include "matrix.h"
 #include "vector.h"
 
-#define LIM_START_DIM      8u
+#define LIM_START_DIM      ((size_t)8)
 #define LIM_DEFAULT_BUDGET 10.0
 #define LIM_MEMORY_FRACTION 0.60
 
@@ -147,15 +147,15 @@ static double lim_rng_double(void) {
 /**
  * Matriz n x n diagonalmente dominante, portanto nao singular.
  */
-static Matrix* lim_random_matrix(unsigned int n) {
+static Matrix* lim_random_matrix(size_t n) {
   Matrix* m = matrix_create_empty(n, n);
   if (m == NULL) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     double soma = 0.0;
-    for (unsigned int j = 0; j < n; j++) {
+    for (size_t j = 0; j < n; j++) {
       if (i == j) {
         continue;
       }
@@ -174,11 +174,11 @@ static Matrix* lim_random_matrix(unsigned int n) {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-  unsigned int n;
+  size_t n;
   double* data;
 } RefMatrix;
 
-static RefMatrix* ref_create(unsigned int n) {
+static RefMatrix* ref_create(size_t n) {
   RefMatrix* m = (RefMatrix*)malloc(sizeof(RefMatrix));
   if (m == NULL) {
     return NULL;
@@ -199,11 +199,11 @@ static void ref_destroy(RefMatrix* m) {
   }
 }
 
-static double ref_get(const RefMatrix* m, unsigned int i, unsigned int j) {
+static double ref_get(const RefMatrix* m, size_t i, size_t j) {
   return m->data[(size_t)i * m->n + j];
 }
 
-static void ref_set(RefMatrix* m, unsigned int i, unsigned int j, double v) {
+static void ref_set(RefMatrix* m, size_t i, size_t j, double v) {
   m->data[(size_t)i * m->n + j] = v;
 }
 
@@ -215,8 +215,8 @@ static RefMatrix* ref_from_matrix(const Matrix* m) {
   if (r == NULL) {
     return NULL;
   }
-  for (unsigned int i = 0; i < m->nlins; i++) {
-    for (unsigned int j = 0; j < m->ncols; j++) {
+  for (size_t i = 0; i < m->nlins; i++) {
+    for (size_t j = 0; j < m->ncols; j++) {
       ref_set(r, i, j, m->data[(size_t)j * m->nlins + i]);
     }
   }
@@ -231,10 +231,10 @@ static RefMatrix* ref_mul(const RefMatrix* a, const RefMatrix* b) {
   if (c == NULL) {
     return NULL;
   }
-  for (unsigned int i = 0; i < a->n; i++) {
-    for (unsigned int j = 0; j < b->n; j++) {
+  for (size_t i = 0; i < a->n; i++) {
+    for (size_t j = 0; j < b->n; j++) {
       double acc = 0.0;
-      for (unsigned int k = 0; k < a->n; k++) {
+      for (size_t k = 0; k < a->n; k++) {
         acc += ref_get(a, i, k) * ref_get(b, k, j);
       }
       ref_set(c, i, j, acc);
@@ -247,7 +247,7 @@ static RefMatrix* ref_mul(const RefMatrix* a, const RefMatrix* b) {
  * Determinante por eliminacao de Gauss com pivoteamento parcial.
  */
 static double ref_determinant(const RefMatrix* m) {
-  const unsigned int n = m->n;
+  const size_t n = m->n;
   double* a = (double*)malloc((size_t)n * n * sizeof(double));
   if (a == NULL) {
     return NAN;
@@ -255,10 +255,10 @@ static double ref_determinant(const RefMatrix* m) {
   memcpy(a, m->data, (size_t)n * n * sizeof(double));
 
   double det = 1.0;
-  for (unsigned int k = 0; k < n; k++) {
-    unsigned int piv = k;
+  for (size_t k = 0; k < n; k++) {
+    size_t piv = k;
     double maximo = fabs(a[(size_t)k * n + k]);
-    for (unsigned int i = k + 1; i < n; i++) {
+    for (size_t i = k + 1; i < n; i++) {
       const double v = fabs(a[(size_t)i * n + k]);
       if (v > maximo) {
         maximo = v;
@@ -272,7 +272,7 @@ static double ref_determinant(const RefMatrix* m) {
     }
 
     if (piv != k) {
-      for (unsigned int j = 0; j < n; j++) {
+      for (size_t j = 0; j < n; j++) {
         const double tmp = a[(size_t)k * n + j];
         a[(size_t)k * n + j] = a[(size_t)piv * n + j];
         a[(size_t)piv * n + j] = tmp;
@@ -282,12 +282,12 @@ static double ref_determinant(const RefMatrix* m) {
 
     det *= a[(size_t)k * n + k];
 
-    for (unsigned int i = k + 1; i < n; i++) {
+    for (size_t i = k + 1; i < n; i++) {
       const double fator = a[(size_t)i * n + k] / a[(size_t)k * n + k];
       if (fator == 0.0) {
         continue;
       }
-      for (unsigned int j = k; j < n; j++) {
+      for (size_t j = k; j < n; j++) {
         a[(size_t)i * n + j] -= fator * a[(size_t)k * n + j];
       }
     }
@@ -422,7 +422,7 @@ static const LimOp lim_ops[] = {
  * Devolve 0 quando os resultados conferem e -1 caso contrario.
  * Em `overflow` indica se o resultado saiu da faixa finita dos doubles.
  */
-static int lim_verify(const LimOp* op, unsigned int n, double* erro, int* overflow) {
+static int lim_verify(const LimOp* op, size_t n, double* erro, int* overflow) {
   *erro = 0.0;
   *overflow = 0;
 
@@ -472,8 +472,8 @@ static int lim_verify(const LimOp* op, unsigned int n, double* erro, int* overfl
       if (r != NULL && rr != NULL) {
         RefMatrix* rl = ref_from_matrix(r);
         if (rl != NULL) {
-          for (unsigned int i = 0; i < n; i++) {
-            for (unsigned int j = 0; j < n; j++) {
+          for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
               const double esperado = (op->id == LIM_OP_ADD)
                                           ? ref_get(ra, i, j) + ref_get(rb, i, j)
                                           : ref_get(ra, i, j) - ref_get(rb, i, j);
@@ -498,8 +498,8 @@ static int lim_verify(const LimOp* op, unsigned int n, double* erro, int* overfl
       if (r != NULL && rr != NULL) {
         RefMatrix* rl = ref_from_matrix(r);
         if (rl != NULL) {
-          for (unsigned int i = 0; i < n; i++) {
-            for (unsigned int j = 0; j < n; j++) {
+          for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
               ref_set(rr, i, j, 2.5 * ref_get(ra, i, j));
             }
           }
@@ -521,8 +521,8 @@ static int lim_verify(const LimOp* op, unsigned int n, double* erro, int* overfl
       if (r != NULL && rr != NULL) {
         RefMatrix* rl = ref_from_matrix(r);
         if (rl != NULL) {
-          for (unsigned int i = 0; i < n; i++) {
-            for (unsigned int j = 0; j < n; j++) {
+          for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
               ref_set(rr, i, j, ref_get(ra, j, i));
             }
           }
@@ -593,8 +593,8 @@ static int lim_verify(const LimOp* op, unsigned int n, double* erro, int* overfl
         RefMatrix* produto = ref_mul(ra, rinv);
         if (produto != NULL) {
           double erro_max = 0.0;
-          for (unsigned int i = 0; i < n; i++) {
-            for (unsigned int j = 0; j < n; j++) {
+          for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
               const double esperado = (i == j) ? 1.0 : 0.0;
               const double d = fabs(ref_get(produto, i, j) - esperado);
               if (d > erro_max) {
@@ -636,7 +636,7 @@ cleanup:
 
 typedef struct {
   const char* name;
-  unsigned int max_n;
+  size_t max_n;
   double time_at_max;
   double predicted_next;
   size_t rss_at_max;
@@ -650,8 +650,8 @@ typedef struct {
  * Procura a maior dimensao que a operacao suporta dentro do orcamento.
  */
 static void lim_search(const LimOp* op, double budget, double memoria_limite, LimSummary* out) {
-  unsigned int n = LIM_START_DIM;
-  unsigned int n_anterior = 0;
+  size_t n = LIM_START_DIM;
+  size_t n_anterior = 0;
   double t_anterior = 0.0;
   double expoente = op->exponent;
 
@@ -668,7 +668,7 @@ static void lim_search(const LimOp* op, double budget, double memoria_limite, Li
   for (;;) {
     const double bytes_necessarios = (double)n * (double)n * (double)sizeof(double);
     if (bytes_necessarios * 8.0 > memoria_limite) {
-      snprintf(out->reason, sizeof(out->reason), "memoria: %u x %u excede o limite", n, n);
+      snprintf(out->reason, sizeof(out->reason), "memoria: %zu x %zu excede o limite", n, n);
       break;
     }
 
@@ -726,13 +726,13 @@ static void lim_search(const LimOp* op, double budget, double memoria_limite, Li
       }
     }
 
-    const unsigned int proximo = n * 2u;
+    const size_t proximo = n * 2u;
     const double razao = (double)proximo / (double)n;
     const double previsto = decorrido * pow(razao, expoente);
     out->predicted_next = previsto;
 
     if (previsto > budget) {
-      snprintf(out->reason, sizeof(out->reason), "tempo: %u previsto em %.2f s", proximo, previsto);
+      snprintf(out->reason, sizeof(out->reason), "tempo: %zu previsto em %.2f s", proximo, previsto);
       break;
     }
 
@@ -757,7 +757,7 @@ static void lim_search(const LimOp* op, double budget, double memoria_limite, Li
  *
  * Devolve 1 quando o resultado e finito e 0 quando estourou a faixa.
  */
-static int lim_det_is_finite(unsigned int n) {
+static int lim_det_is_finite(size_t n) {
   lim_rng_seed(0x9E3779B97F4A7C15ULL + n);
 
   Matrix* a = lim_random_matrix(n);
@@ -778,13 +778,13 @@ static int lim_det_is_finite(unsigned int n) {
  * Primeiro dobra a dimensao ate encontrar um determinante infinito e depois
  * refina o limiar com busca binaria.
  */
-static unsigned int lim_det_finite_limit(double budget, double memoria_limite) {
-  unsigned int n = LIM_START_DIM;
-  unsigned int ultimo_finito = 0;
-  unsigned int primeiro_infinito = 0;
+static size_t lim_det_finite_limit(double budget, double memoria_limite) {
+  size_t n = LIM_START_DIM;
+  size_t ultimo_finito = 0;
+  size_t primeiro_infinito = 0;
 
   for (;;) {
-    const unsigned int proximo = n * 2u;
+    const size_t proximo = n * 2u;
     const double bytes = (double)proximo * (double)proximo * (double)sizeof(double) * 4.0;
     if (bytes > memoria_limite) {
       break;
@@ -804,11 +804,11 @@ static unsigned int lim_det_finite_limit(double budget, double memoria_limite) {
   }
 
   /* Refina o limiar: ultimo_finito e finito, primeiro_infinito nao e */
-  unsigned int lo = ultimo_finito;
-  unsigned int hi = primeiro_infinito;
+  size_t lo = ultimo_finito;
+  size_t hi = primeiro_infinito;
 
   while (hi - lo > 1u) {
-    const unsigned int mid = lo + (hi - lo) / 2u;
+    const size_t mid = lo + (hi - lo) / 2u;
     const double bytes_mid = (double)mid * (double)mid * (double)sizeof(double) * 4.0;
     if (bytes_mid > memoria_limite) {
       break;
@@ -835,11 +835,11 @@ static unsigned int lim_det_finite_limit(double budget, double memoria_limite) {
 /**
  * Procura a maior dimensao que cabe na memoria, sem executar a operacao.
  */
-static unsigned int lim_memory_search(unsigned int matrizes, double memoria_limite) {
-  unsigned int n = LIM_START_DIM;
+static size_t lim_memory_search(size_t matrizes, double memoria_limite) {
+  size_t n = LIM_START_DIM;
 
   for (;;) {
-    const unsigned int proximo = n * 2u;
+    const size_t proximo = n * 2u;
     const double bytes = (double)proximo * (double)proximo * (double)sizeof(double) * (double)matrizes;
     if (bytes > memoria_limite) {
       return n;
@@ -852,7 +852,7 @@ static unsigned int lim_memory_search(unsigned int matrizes, double memoria_limi
     }
 
     int ok = 1;
-    for (unsigned int i = 0; i < matrizes; i++) {
+    for (size_t i = 0; i < matrizes; i++) {
       pilha[i] = matrix_create_empty(proximo, proximo);
       if (pilha[i] == NULL) {
         ok = 0;
@@ -860,7 +860,7 @@ static unsigned int lim_memory_search(unsigned int matrizes, double memoria_limi
       }
     }
 
-    for (unsigned int i = 0; i < matrizes; i++) {
+    for (size_t i = 0; i < matrizes; i++) {
       matrix_destroy(pilha[i]);
     }
     free(pilha);
@@ -897,19 +897,19 @@ int main(int argc, char* argv[]) {
     printf(" (usando %.0f%% como limite)\n", LIM_MEMORY_FRACTION * 100.0);
   }
   printf("orcamento de tempo por execucao: %.1f s\n", budget);
-  printf("dimensao inicial: %u (dobrando a cada passo)\n\n", LIM_START_DIM);
+  printf("dimensao inicial: %zu (dobrando a cada passo)\n\n", LIM_START_DIM);
 
   printf("=== Limite de memoria (somente alocacao) ===\n");
-  const unsigned int n1 = lim_memory_search(1, memoria_limite);
-  const unsigned int n3 = lim_memory_search(3, memoria_limite);
-  const unsigned int n6 = lim_memory_search(6, memoria_limite);
-  printf("1 matriz  n x n : %6u x %6u  (", n1, n1);
+  const size_t n1 = lim_memory_search(1, memoria_limite);
+  const size_t n3 = lim_memory_search(3, memoria_limite);
+  const size_t n6 = lim_memory_search(6, memoria_limite);
+  printf("1 matriz  n x n : %6zu x %6zu  (", n1, n1);
   lim_print_bytes((double)n1 * n1 * sizeof(double));
   printf(")\n");
-  printf("3 matrizes      : %6u x %6u  (", n3, n3);
+  printf("3 matrizes      : %6zu x %6zu  (", n3, n3);
   lim_print_bytes((double)n3 * n3 * sizeof(double) * 3.0);
   printf(")\n");
-  printf("6 matrizes      : %6u x %6u  (", n6, n6);
+  printf("6 matrizes      : %6zu x %6zu  (", n6, n6);
   lim_print_bytes((double)n6 * n6 * sizeof(double) * 6.0);
   printf(")\n");
   printf("3 matrizes e o pior caso do produto de matrizes;\n");
@@ -929,7 +929,7 @@ int main(int argc, char* argv[]) {
          "operacao", "max n", "tempo (s)", "previsto+", "pico RSS", "motivo");
   printf("---------------------------------------------------------------------------------------------------\n");
   for (size_t o = 0; o < LIM_OP_COUNT; o++) {
-    printf("%-20s %10u %14.3f %12.2f ", resumo[o].name, resumo[o].max_n,
+    printf("%-20s %10zu %14.3f %12.2f ", resumo[o].name, resumo[o].max_n,
            resumo[o].time_at_max, resumo[o].predicted_next);
     lim_print_bytes((double)resumo[o].rss_at_max);
     printf(" %s\n", resumo[o].reason);
@@ -941,19 +941,19 @@ int main(int argc, char* argv[]) {
   printf("---------------------------------------------------------------------------------------------------\n");
   for (size_t o = 0; o < LIM_OP_COUNT; o++) {
     if (!resumo[o].verified) {
-      printf("%-20s %10u %14s %s\n", resumo[o].name, resumo[o].max_n, "-", "FALHOU");
+      printf("%-20s %10zu %14s %s\n", resumo[o].name, resumo[o].max_n, "-", "FALHOU");
     } else if (resumo[o].overflow) {
-      printf("%-20s %10u %14s %s\n", resumo[o].name, resumo[o].max_n, "-",
+      printf("%-20s %10zu %14s %s\n", resumo[o].name, resumo[o].max_n, "-",
              "OVERFLOW (fora da faixa finita)");
     } else {
-      printf("%-20s %10u %14.3e OK\n", resumo[o].name, resumo[o].max_n, resumo[o].verify_error);
+      printf("%-20s %10zu %14.3e OK\n", resumo[o].name, resumo[o].max_n, resumo[o].verify_error);
     }
   }
 
-  const unsigned int det_finito = lim_det_finite_limit(budget, memoria_limite);
+  const size_t det_finito = lim_det_finite_limit(budget, memoria_limite);
   printf("\n=== Faixa finita do determinante ===\n");
   printf("o determinante cresce exponencialmente com n: para as matrizes usadas aqui\n");
-  printf("ele deixa de caber em um double (|det| > 1.8e308) a partir de n = %u\n", det_finito + 1);
+  printf("ele deixa de caber em um double (|det| > 1.8e308) a partir de n = %zu\n", det_finito + 1);
   printf("acima disso matrix_determinant devolve inf, e nao um numero valido\n");
 
   return 0;

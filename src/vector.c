@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <math.h>
 
-Vector* vector_create_empty(unsigned int dim) {
+Vector* vector_create_empty(size_t dim) {
   if (dim == 0) {
     errno = EINVALIDDIM;
     return NULL;
@@ -31,7 +31,7 @@ Vector* vector_create_empty(unsigned int dim) {
   return v;
 }
 
-Vector* vector_create(unsigned int dim, double coords[]) {
+Vector* vector_create(size_t dim, double coords[]) {
   if (dim == 0) {
     errno = EINVALIDDIM;
     return NULL;
@@ -80,7 +80,7 @@ Vector* vector_copy(const Vector* v) {
   return copy;
 }
 
-Vector* vector_set(Vector* v, unsigned int i, double value) {
+Vector* vector_set(Vector* v, size_t i, double value) {
   if (v == NULL) {
     errno = EVECTORNULL;
     return NULL;
@@ -114,7 +114,7 @@ Vector* vector_add(const Vector* a, const Vector* b) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     v->x[i] = a->x[i] + b->x[i];
   }
   
@@ -146,7 +146,7 @@ Vector* vector_sub(const Vector* a, const Vector* b) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     v->x[i] = a->x[i] - b->x[i];
   }
   
@@ -173,7 +173,7 @@ Vector* vector_mul(double scalar, const Vector* a) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     v->x[i] = scalar * a->x[i];
   }
   
@@ -192,7 +192,7 @@ double vector_inner_product(const Vector* a, const Vector* b) {
   }
 
   double p = 0.00;
-  for (unsigned int i = 0; i< a->dim; i++) {
+  for (size_t i = 0; i< a->dim; i++) {
     p += a->x[i]* b->x[i];
   }
 
@@ -211,7 +211,7 @@ double vector_norm_p(const Vector* a, unsigned int p) {
   }
 
   double sum = 0.00;
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     sum += pow(fabs(a->x[i]), (double)p);
   }
   double rad = 1.0 / (double)p;
@@ -226,7 +226,7 @@ double vector_norm_inf(const Vector* a) {
   }
 
   double max = fabs(a->x[0]);
-  for (unsigned int i = 1; i < a->dim; i++) {
+  for (size_t i = 1; i < a->dim; i++) {
     double modulo = fabs(a->x[i]);
     if (modulo > max) {
       max = modulo;
@@ -240,7 +240,7 @@ double vector_norm(const Vector* a) {
   return vector_norm_p(a, 2);
 }
 
-Vector* vector_product(unsigned int dim, const Vector vectors[]) {
+Vector* vector_product(size_t dim, const Vector vectors[]) {
   if (dim < 2) {
     errno = EINVALIDDIM;
     return NULL;
@@ -288,7 +288,7 @@ Vector* vector_product(unsigned int dim, const Vector vectors[]) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < dim; i++) {
+  for (size_t i = 0; i < dim; i++) {
     // monta submatriz eliminando a coluna i
     Matrix* submatrix = matrix_remove_column_vector_at(aux, i);
     if (submatrix == NULL) {
@@ -330,7 +330,7 @@ void vector_print(const Vector* v, const char* vector_label) {
   }
 
   printf("(");
-  for (unsigned int i = 0; i < v->dim; i++) {
+  for (size_t i = 0; i < v->dim; i++) {
     if (i + 1 < v->dim) {
       printf("%.2f, ", v->x[i]);
     } else {

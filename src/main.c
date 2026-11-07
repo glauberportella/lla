@@ -15,7 +15,7 @@ void test_vector_create_empty() {
   assert(a != NULL);
   assert(a->dim == 3);
 
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     assert(a->x[i] == 0.0);
   }
 
@@ -549,8 +549,8 @@ void test_matrix_lu_decomposition() {
   assert(pa != NULL);
   assert(lu_prod != NULL);
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
+  for (size_t i = 0; i < a->nlins; i++) {
+    for (size_t j = 0; j < a->ncols; j++) {
       assert(fabs(matrix_get(pa, i, j) - matrix_get(lu_prod, i, j)) < 1e-9);
     }
   }
@@ -584,8 +584,8 @@ void test_matrix_transpose() {
   assert(at->nlins == a->ncols);
   assert(at->ncols == a->nlins);
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
+  for (size_t i = 0; i < a->nlins; i++) {
+    for (size_t j = 0; j < a->ncols; j++) {
       assert(fabs(matrix_get(at, i, j) - matrix_get(a, j, i)) < 1e-9);
     }
   }
@@ -618,8 +618,8 @@ void test_matrix_inverse() {
   Matrix* product = matrix_mul(a, inverse);
   assert(product != NULL);
 
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
+  for (size_t i = 0; i < a->nlins; i++) {
+    for (size_t j = 0; j < a->ncols; j++) {
       double expected = (i == j) ? 1.0 : 0.0;
       assert(fabs(matrix_get(product, i, j) - expected) < 1e-9);
     }
@@ -762,7 +762,7 @@ void test_vector_product() {
   assert(product_2d != NULL);
   assert(product_2d->dim == 2);
 
-  for (unsigned int i = 0; i < 2; i++) {
+  for (size_t i = 0; i < 2; i++) {
     assert(fabs(product_2d->x[i] - expected_2d[i]) < epsilon);
   }
   assert(fabs(vector_inner_product(product_2d, &vectors_2d[0])) < epsilon);
@@ -785,7 +785,7 @@ void test_vector_product() {
   assert(product_3d != NULL);
   assert(product_3d->dim == 3);
 
-  for (unsigned int i = 0; i < 3; i++) {
+  for (size_t i = 0; i < 3; i++) {
     assert(fabs(product_3d->x[i] - expected_3d[i]) < epsilon);
   }
   assert(fabs(vector_inner_product(product_3d, &vectors_3d[0])) < epsilon);
@@ -815,7 +815,7 @@ void test_vector_product() {
   assert(product_5d != NULL);
   assert(product_5d->dim == 5);
 
-  for (unsigned int i = 0; i < 5; i++) {
+  for (size_t i = 0; i < 5; i++) {
     assert(fabs(product_5d->x[i] - expected_5d[i]) < epsilon);
   }
   assert(fabs(vector_inner_product(product_5d, &vectors_5d[0])) < epsilon);
@@ -831,15 +831,15 @@ void test_vector_product() {
 }
 
 static double svd_reconstruction_error(const Matrix* a, const SVDResult* r) {
-  const unsigned int m = a->nlins;
-  const unsigned int n = a->ncols;
-  const unsigned int nsing = r->sigma->dim;
+  const size_t m = a->nlins;
+  const size_t n = a->ncols;
+  const size_t nsing = r->sigma->dim;
 
   double erro = 0.0;
-  for (unsigned int i = 0; i < m; i++) {
-    for (unsigned int j = 0; j < n; j++) {
+  for (size_t i = 0; i < m; i++) {
+    for (size_t j = 0; j < n; j++) {
       double soma = 0.0;
-      for (unsigned int k = 0; k < nsing; k++) {
+      for (size_t k = 0; k < nsing; k++) {
         soma += matrix_get(r->U, i, k) * r->sigma->x[k] * matrix_get(r->VT, k, j);
       }
       const double dif = soma - matrix_get(a, i, j);
@@ -850,12 +850,12 @@ static double svd_reconstruction_error(const Matrix* a, const SVDResult* r) {
   return sqrt(erro);
 }
 
-static double svd_orthogonality_error(const Matrix* m, unsigned int n) {
+static double svd_orthogonality_error(const Matrix* m, size_t n) {
   double erro = 0.0;
-  for (unsigned int i = 0; i < n; i++) {
-    for (unsigned int j = 0; j < n; j++) {
+  for (size_t i = 0; i < n; i++) {
+    for (size_t j = 0; j < n; j++) {
       double soma = 0.0;
-      for (unsigned int k = 0; k < m->nlins; k++) {
+      for (size_t k = 0; k < m->nlins; k++) {
         soma += matrix_get(m, k, i) * matrix_get(m, k, j);
       }
       const double esperado = (i == j) ? 1.0 : 0.0;
@@ -1148,7 +1148,7 @@ void test_matrix_rank() {
   assert(matrix_rank(b) == 0);
   matrix_destroy(b);
 
-  assert(matrix_rank(NULL) == (unsigned int)-1);
+  assert(matrix_rank(NULL) == SIZE_MAX);
   assert(errno == EMATRIXNULL);
 }
 
@@ -1210,7 +1210,7 @@ void test_lsystem_sistema_singular() {
   // solucao de norma minima dos minimos quadrados
   double rec1 = 0.0;
   double rec2 = 0.0;
-  for (unsigned int i = 0; i < 2; i++) {
+  for (size_t i = 0; i < 2; i++) {
     rec1 += matrix_get(a, 0, i) * x->x[i];
     rec2 += matrix_get(a, 1, i) * x->x[i];
   }

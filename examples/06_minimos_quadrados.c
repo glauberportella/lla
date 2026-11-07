@@ -51,7 +51,7 @@ int main(void) {
   printf("Horas por unidade de tamanho: %.3f\n\n", a1);
 
   // Previsões para duas novas tarefas
-  for (int k = 0; k < 2; k++) {
+  for (size_t k = 0; k < 2; k++) {
     double tamanho_pred[] = { 3.0, 10.0 };
     printf("Previsao p/ tamanho %.1f: %.2f horas\n",
            tamanho_pred[k], a0 + a1 * tamanho_pred[k]);
@@ -59,7 +59,7 @@ int main(void) {
 
   // Residuo: norma do erro do ajuste
   double residuo = 0.0;
-  for (unsigned int i = 0; i < 6; i++) {
+  for (size_t i = 0; i < 6; i++) {
     double erro = tempo[i] - (a0 + a1 * c2[i]);
     residuo += erro * erro;
   }

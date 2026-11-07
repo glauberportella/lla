@@ -24,9 +24,9 @@ double tolerancia = 1e-10;
 
 /** Resolve L * y = Pb (triangular inferior, diagonal unitaria). */
 void substituicao_forward(const Matrix* l, const Vector* pb, Vector* y) {
-  for (unsigned int i = 0; i < y->dim; i++) {
+  for (size_t i = 0; i < y->dim; i++) {
     double soma = 0.0;
-    for (unsigned int j = 0; j < i; j++) {
+    for (size_t j = 0; j < i; j++) {
       soma += matrix_get(l, i, j) * y->x[j];
     }
     y->x[i] = pb->x[i] - soma; // l(i,i) = 1
@@ -35,12 +35,12 @@ void substituicao_forward(const Matrix* l, const Vector* pb, Vector* y) {
 
 /** Resolve U * x = y (triangular superior). */
 void substituicao_back(const Matrix* u, const Vector* y, Vector* x) {
-  for (int i = (int)u->ncols - 1; i >= 0; i--) {
+  for (size_t i = u->ncols; i-- > 0;) {
     double soma = 0.0;
-    for (unsigned int j = (unsigned int)i + 1; j < u->ncols; j++) {
-      soma += matrix_get(u, (unsigned int)i, j) * x->x[j];
+    for (size_t j = i + 1; j < u->ncols; j++) {
+      soma += matrix_get(u, i, j) * x->x[j];
     }
-    x->x[(unsigned int)i] = (y->x[(unsigned int)i] - soma) / matrix_get(u, (unsigned int)i, (unsigned int)i);
+    x->x[i] = (y->x[i] - soma) / matrix_get(u, i, i);
   }
 }
 
@@ -48,7 +48,7 @@ int comparar_vetores(const Vector* a, const Vector* b, double tol) {
   if (a == NULL || b == NULL || a->dim != b->dim) {
     return 0;
   }
-  for (unsigned int i = 0; i < a->dim; i++) {
+  for (size_t i = 0; i < a->dim; i++) {
     if (fabs(a->x[i] - b->x[i]) > tol) {
       return 0;
     }
@@ -102,9 +102,9 @@ int main(void) {
   // Resolucao do sistema via substituicoes sobre L e U:
   // 1) P*b
   Vector pb_struct = { .dim = 3, .x = (double*)malloc(3 * sizeof(double)) };
-  for (unsigned int i = 0; i < 3; i++) { // P*b
+  for (size_t i = 0; i < 3; i++) { // P*b
     double soma = 0.0;
-    for (unsigned int j = 0; j < 3; j++) {
+    for (size_t j = 0; j < 3; j++) {
       soma += matrix_get(lu->p, i, j) * b->x[j];
     }
     pb_struct.x[i] = soma;

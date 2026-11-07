@@ -29,9 +29,9 @@ void svd_givens_rotation(double f, double g, double* c, double* s) {
   *s = g / norm;
 }
 
-static double svd_dot(const double* a, const double* b, unsigned int n) {
+static double svd_dot(const double* a, const double* b, size_t n) {
   double sum = 0.0;
-  for (unsigned int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     sum += a[i] * b[i];
   }
   return sum;
@@ -43,7 +43,7 @@ static double svd_dot(const double* a, const double* b, unsigned int n) {
  * O vetor e escrito em v (que pode ser o proprio x) e alpha (o novo valor
  * da diagonal) e devolvido. Retorna 0.0 quando o refletor e degenerado.
  */
-static double svd_householder_vector(Vector* v, const double* x, unsigned int len) {
+static double svd_householder_vector(Vector* v, const double* x, size_t len) {
   const double norm_x = sqrt(svd_dot(x, x, len));
   if (norm_x == 0.0) {
     return 0.0;
@@ -51,7 +51,7 @@ static double svd_householder_vector(Vector* v, const double* x, unsigned int le
 
   const double alpha = -lla_signal(x[0]) * norm_x;
 
-  for (unsigned int i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++) {
     v->x[i] = x[i];
   }
   v->x[0] -= alpha;
@@ -61,7 +61,7 @@ static double svd_householder_vector(Vector* v, const double* x, unsigned int le
     return 0.0;
   }
 
-  for (unsigned int i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++) {
     v->x[i] /= norm_v;
   }
 
@@ -75,26 +75,26 @@ static double svd_householder_vector(Vector* v, const double* x, unsigned int le
  * O produto v v^T nunca e materializado: cada coluna usa o produto interno
  * direto com v, o que torna a operacao O(m * n) e sem alocacoes.
  */
-static void svd_apply_reflector_left(Matrix* b, Matrix* u, const Vector* v, unsigned int k) {
-  const unsigned int m = b->nlins;
-  const unsigned int n = b->ncols;
+static void svd_apply_reflector_left(Matrix* b, Matrix* u, const Vector* v, size_t k) {
+  const size_t m = b->nlins;
+  const size_t n = b->ncols;
 
-  for (unsigned int j = k; j < n; j++) {
+  for (size_t j = k; j < n; j++) {
     double* col = b->data + (size_t)j * b->nlins;
     const double dot = 2.0 * svd_dot(v->x, col + k, m - k);
-    for (unsigned int i = k; i < m; i++) {
+    for (size_t i = k; i < m; i++) {
       col[i] -= v->x[i - k] * dot;
     }
   }
 
-  const unsigned int ucols = u->ncols;
-  for (unsigned int i = 0; i < m; i++) {
+  const size_t ucols = u->ncols;
+  for (size_t i = 0; i < m; i++) {
     double dot = 0.0;
-    for (unsigned int l = k; l < ucols; l++) {
+    for (size_t l = k; l < ucols; l++) {
       dot += u->data[(size_t)l * u->nlins + i] * v->x[l - k];
     }
     dot *= 2.0;
-    for (unsigned int j = k; j < ucols; j++) {
+    for (size_t j = k; j < ucols; j++) {
       u->data[(size_t)j * u->nlins + i] -= dot * v->x[j - k];
     }
   }
@@ -107,28 +107,28 @@ static void svd_apply_reflector_left(Matrix* b, Matrix* u, const Vector* v, unsi
  * O produto v v^T nunca e materializado: cada linha usa o produto interno
  * direto com v, o que torna a operacao O(m * n) e sem alocacoes.
  */
-static void svd_apply_reflector_right(Matrix* b, Matrix* v_mat, const Vector* v, unsigned int k) {
-  const unsigned int m = b->nlins;
-  const unsigned int n = b->ncols;
+static void svd_apply_reflector_right(Matrix* b, Matrix* v_mat, const Vector* v, size_t k) {
+  const size_t m = b->nlins;
+  const size_t n = b->ncols;
 
-  for (unsigned int i = 0; i < m; i++) {
+  for (size_t i = 0; i < m; i++) {
     double dot = 0.0;
-    for (unsigned int l = k + 1; l < n; l++) {
+    for (size_t l = k + 1; l < n; l++) {
       dot += b->data[(size_t)l * b->nlins + i] * v->x[l - k - 1];
     }
     dot *= 2.0;
-    for (unsigned int j = k + 1; j < n; j++) {
+    for (size_t j = k + 1; j < n; j++) {
       b->data[(size_t)j * b->nlins + i] -= dot * v->x[j - k - 1];
     }
   }
 
-  for (unsigned int i = 0; i < v_mat->nlins; i++) {
+  for (size_t i = 0; i < v_mat->nlins; i++) {
     double dot = 0.0;
-    for (unsigned int l = k + 1; l < n; l++) {
+    for (size_t l = k + 1; l < n; l++) {
       dot += v->x[l - k - 1] * v_mat->data[(size_t)l * v_mat->nlins + i];
     }
     dot *= 2.0;
-    for (unsigned int j = k + 1; j < n; j++) {
+    for (size_t j = k + 1; j < n; j++) {
       v_mat->data[(size_t)j * v_mat->nlins + i] -= dot * v->x[j - k - 1];
     }
   }
@@ -137,11 +137,11 @@ static void svd_apply_reflector_right(Matrix* b, Matrix* v_mat, const Vector* v,
 /**
  * Rotacao a direita: v <- v * M, com M = [[c, s], [-s, c]] nas colunas p,p+1.
  */
-static void svd_rotate_columns(Matrix* v, unsigned int p, double c, double s) {
+static void svd_rotate_columns(Matrix* v, size_t p, double c, double s) {
   double* col_p = v->data + (size_t)p * v->nlins;
   double* col_p1 = v->data + (size_t)(p + 1) * v->nlins;
 
-  for (unsigned int i = 0; i < v->nlins; i++) {
+  for (size_t i = 0; i < v->nlins; i++) {
     const double vp = col_p[i];
     const double vp1 = col_p1[i];
     col_p[i] = c * vp - s * vp1;
@@ -152,11 +152,11 @@ static void svd_rotate_columns(Matrix* v, unsigned int p, double c, double s) {
 /**
  * Rotacao a esquerda: u <- u * G, com G = [[c, s], [-s, c]] nas colunas p,p+1.
  */
-static void svd_rotate_rows(Matrix* u, unsigned int p, double c, double s) {
+static void svd_rotate_rows(Matrix* u, size_t p, double c, double s) {
   double* col_p = u->data + (size_t)p * u->nlins;
   double* col_p1 = u->data + (size_t)(p + 1) * u->nlins;
 
-  for (unsigned int i = 0; i < u->nlins; i++) {
+  for (size_t i = 0; i < u->nlins; i++) {
     const double up = col_p[i];
     const double up1 = col_p1[i];
     col_p[i] = c * up - s * up1;
@@ -164,11 +164,11 @@ static void svd_rotate_rows(Matrix* u, unsigned int p, double c, double s) {
   }
 }
 
-static void svd_swap_columns(Matrix* m, unsigned int i, unsigned int j) {
+static void svd_swap_columns(Matrix* m, size_t i, size_t j) {
   double* col_i = m->data + (size_t)i * m->nlins;
   double* col_j = m->data + (size_t)j * m->nlins;
 
-  for (unsigned int l = 0; l < m->nlins; l++) {
+  for (size_t l = 0; l < m->nlins; l++) {
     const double aux = col_i[l];
     col_i[l] = col_j[l];
     col_j[l] = aux;
@@ -178,14 +178,14 @@ static void svd_swap_columns(Matrix* m, unsigned int i, unsigned int j) {
 /**
  * Copia as ncols primeiras colunas de m.
  */
-static Matrix* svd_trim_columns(const Matrix* m, unsigned int ncols) {
+static Matrix* svd_trim_columns(const Matrix* m, size_t ncols) {
   Matrix* t = matrix_create_empty(m->nlins, ncols);
   if (t == NULL) {
     errno = ESVDALLOCATION;
     return NULL;
   }
 
-  for (unsigned int j = 0; j < ncols; j++) {
+  for (size_t j = 0; j < ncols; j++) {
     memcpy(t->data + (size_t)j * t->nlins, m->data + (size_t)j * m->nlins, m->nlins * sizeof(double));
   }
 
@@ -198,21 +198,15 @@ HouseholderBidiagResult* svd_householder_bidiag(const Matrix* a) {
     return NULL;
   }
 
-  const unsigned int m = a->nlins;
-  const unsigned int n = a->ncols;
+  const size_t m = a->nlins;
+  const size_t n = a->ncols;
 
   if (m == 0 || n == 0) {
     errno = ESVDINVALIDDIM;
     return NULL;
   }
 
-  
   Matrix* b = matrix_copy(a);
-  if (b == NULL) {
-    errno = ESVDALLOCATION;
-    return NULL;
-  }
-
   if (b == NULL) {
     errno = ESVDALLOCATION;
     return NULL;
@@ -263,9 +257,9 @@ HouseholderBidiagResult* svd_householder_bidiag(const Matrix* a) {
     return NULL;
   }
 
-  const unsigned int steps = (m < n) ? m : n;
+  const size_t steps = (m < n) ? m : n;
 
-  for (unsigned int k = 0; k < steps; k++) {
+  for (size_t k = 0; k < steps; k++) {
     if (k + 1 < m) {
       const double alpha = svd_householder_vector(reflector, b->data + (size_t)k * b->nlins + k, m - k);
       if (alpha != 0.0) {
@@ -276,7 +270,7 @@ HouseholderBidiagResult* svd_householder_bidiag(const Matrix* a) {
     d->x[k] = b->data[(size_t)k * b->nlins + k];
 
     if (k + 1 < n) {
-      for (unsigned int j = k + 1; j < n; j++) {
+      for (size_t j = k + 1; j < n; j++) {
         reflector->x[j - k - 1] = b->data[(size_t)j * b->nlins + k];
       }
       const double alpha = svd_householder_vector(reflector, reflector->x, n - k - 1);
@@ -328,17 +322,17 @@ QRBidiagResult* svd_qr_bidiag_iter(HouseholderBidiagResult* hbdr) {
     return NULL;
   }
 
-  const unsigned int n = hbdr->d->dim;
+  const size_t n = hbdr->d->dim;
   Vector* alpha = hbdr->d;
   Vector* beta = hbdr->e;
   Matrix* u = hbdr->U;
   Matrix* v = hbdr->V;
 
-  const unsigned int max_iter = 30 * n + 10;
+  const size_t max_iter = 30 * n + 10;
   int converged = (n < 2);
 
-  for (unsigned int sweep = 0; sweep < max_iter && !converged; sweep++) {
-    unsigned int q = n - 1;
+  for (size_t sweep = 0; sweep < max_iter && !converged; sweep++) {
+    size_t q = n - 1;
     while (q > 0 && fabs(beta->x[q - 1]) < SVD_TOLERANCE * (fabs(alpha->x[q - 1]) + fabs(alpha->x[q]))) {
       beta->x[q - 1] = 0.0;
       q--;
@@ -377,7 +371,7 @@ QRBidiagResult* svd_qr_bidiag_iter(HouseholderBidiagResult* hbdr) {
 
     double gamma = -s0 * a1;
 
-    for (unsigned int p = 0; p < q; p++) {
+    for (size_t p = 0; p < q; p++) {
       const double ap = alpha->x[p];
       const double r = sqrt(ap * ap + gamma * gamma);
       double gbulge = 0.0;
@@ -429,7 +423,7 @@ QRBidiagResult* svd_qr_bidiag_iter(HouseholderBidiagResult* hbdr) {
       }
     }
 
-    for (unsigned int k = 0; k < q; k++) {
+    for (size_t k = 0; k < q; k++) {
       if (fabs(beta->x[k]) < SVD_TOLERANCE * (fabs(alpha->x[k]) + fabs(alpha->x[k + 1]))) {
         beta->x[k] = 0.0;
       }
@@ -466,23 +460,23 @@ SVDResult* svd_pos_proc(QRBidiagResult* bdr) {
     return NULL;
   }
 
-  const unsigned int n = bdr->d->dim;
+  const size_t n = bdr->d->dim;
   Vector* sigma = bdr->d;
   Matrix* u = bdr->U;
   Matrix* v = bdr->V;
 
-  for (unsigned int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     if (sigma->x[i] < 0.0) {
       sigma->x[i] = -sigma->x[i];
-      for (unsigned int j = 0; j < u->nlins; j++) {
+      for (size_t j = 0; j < u->nlins; j++) {
         u->data[(size_t)i * u->nlins + j] = -u->data[(size_t)i * u->nlins + j];
       }
     }
   }
 
-  for (unsigned int i = 0; i + 1 < n; i++) {
-    unsigned int maior = i;
-    for (unsigned int j = i + 1; j < n; j++) {
+  for (size_t i = 0; i + 1 < n; i++) {
+    size_t maior = i;
+    for (size_t j = i + 1; j < n; j++) {
       if (sigma->x[j] > sigma->x[maior]) {
         maior = j;
       }
@@ -545,8 +539,8 @@ SVDResult* svd_golub_reinsch(const Matrix* a) {
     return NULL;
   }
 
-  const unsigned int m = a->nlins;
-  const unsigned int n = a->ncols;
+  const size_t m = a->nlins;
+  const size_t n = a->ncols;
 
   if (m == 0 || n == 0) {
     errno = ESVDINVALIDDIM;
@@ -569,7 +563,7 @@ SVDResult* svd_golub_reinsch(const Matrix* a) {
     return NULL;
   }
 
-  const unsigned int nsing = (m < n) ? m : n;
+  const size_t nsing = (m < n) ? m : n;
 
   Vector* sigma = vector_create_empty(nsing);
   if (sigma == NULL) {
@@ -581,7 +575,7 @@ SVDResult* svd_golub_reinsch(const Matrix* a) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < nsing; i++) {
+  for (size_t i = 0; i < nsing; i++) {
     sigma->x[i] = at_result->sigma->x[i];
   }
 

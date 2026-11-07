@@ -1,6 +1,8 @@
 #ifndef _VECTOR_H_
 #define _VECTOR_H_
 
+#include <stddef.h>
+
 #define EINVALIDDIM       1000
 #define EVECTORALLOCATION 1001
 #define EVECTORNULL       1002
@@ -8,15 +10,15 @@
 
 typedef struct vector_rn_t {
   double* x;
-  unsigned int dim;
+  size_t dim;
 } Vector;
 
-Vector* vector_create_empty(unsigned int dim);
-Vector* vector_create(unsigned int dim, double coords[]);
+Vector* vector_create_empty(size_t dim);
+Vector* vector_create(size_t dim, double coords[]);
 void vector_destroy(Vector* v);
 
 Vector* vector_copy(const Vector* v);
-Vector* vector_set(Vector* v, unsigned int i, double value);
+Vector* vector_set(Vector* v, size_t i, double value);
 
 Vector* vector_add(const Vector* a, const Vector* b);
 Vector* vector_sub(const Vector* a, const Vector* b);
@@ -26,7 +28,7 @@ double vector_norm_p(const Vector* a, unsigned int p);
 double vector_norm_inf(const Vector* a);
 double vector_norm(const Vector* a);
 
-Vector* vector_product(unsigned int dim, const Vector vectors[]);
+Vector* vector_product(size_t dim, const Vector vectors[]);
 
 void vector_print(const Vector* v, const char* vector_label);
 void vector_println(const Vector* v, const char* vector_label);
