@@ -34,7 +34,7 @@ typedef struct LU_t {
   Matrix* l;   // triangular inferior, diagonal unitaria
   Matrix* u;   // triangular superior
   Matrix* p;   // permutacao: P*A = L*U
-  int*    piv; // permutacao em forma de vetor, com piv[i] = p[i] da matriz P:
+  size_t* piv; // permutacao em forma de vetor, com piv[i] = p[i] da matriz P:
                // a linha i de P*A corresponde a linha piv[i] de A.
                // Propriedade da estrutura; liberado internamente por lu_destroy.
 } LU;

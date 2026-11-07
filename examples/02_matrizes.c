@@ -122,7 +122,7 @@ int main(void) {
   // de x para a coluna i e NAO assume a posse do buffer, por isso ele e
   // liberado aqui no fim do programa.
   double* nova_col = (double*)malloc(3 * sizeof(double));
-  for (int i = 0; i < 3; i++) {
+  for (size_t i = 0; i < 3; i++) {
     nova_col[i] = 7.0;
   }
   printf("Substituindo a coluna 1 por (7,7,7)...\n");
@@ -148,7 +148,7 @@ int main(void) {
   matrix_destroy(m_menos);
   vector_destroy(nova_pos);
   free(nova_col);
-  for (unsigned int i = 0; i < 3; i++) {
+  for (size_t i = 0; i < 3; i++) {
     free(linhas[i].x);
   }
   free(linhas);

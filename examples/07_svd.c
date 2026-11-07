@@ -21,8 +21,8 @@
 /** maior valor absoluto da matriz (medida do erro maximo). */
 double erro_max(const Matrix* a, const Matrix* b) {
   double max = 0.0;
-  for (unsigned int i = 0; i < a->nlins; i++) {
-    for (unsigned int j = 0; j < a->ncols; j++) {
+  for (size_t i = 0; i < a->nlins; i++) {
+    for (size_t j = 0; j < a->ncols; j++) {
       double e = fabs(matrix_get(a, i, j) - matrix_get(b, i, j));
       if (e > max) {
         max = e;
@@ -61,7 +61,7 @@ int main(void) {
 
   // A = U * diag(sigma) * V^T
   Matrix* sigma = matrix_create_empty(3, 3);
-  for (unsigned int i = 0; i < 3; i++) {
+  for (size_t i = 0; i < 3; i++) {
     matrix_set(sigma, i, i, r->sigma->x[i]);
   }
   Matrix* us = matrix_mul(r->U, sigma);
@@ -82,8 +82,8 @@ int main(void) {
 
   // A mesma decomposicao tambem diagnostica o "posto" efetivo: o sigma
   // dois cai ~10x e os demais caem muito mais
-  for (unsigned int i = 0; i < r->sigma->dim; i++) {
-    printf("sigma[%u] = %.6f\n", i, r->sigma->x[i]);
+  for (size_t i = 0; i < r->sigma->dim; i++) {
+    printf("sigma[%zu] = %.6f\n", i, r->sigma->x[i]);
   }
   svd_destroy(r);
 

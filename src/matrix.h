@@ -2,6 +2,8 @@
 #define _MATRIX_H_
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include "vector.h"
 
 #define EMATRIXALLOCATION         2000
@@ -24,14 +26,14 @@
  * alocação por coluna e sem dispersar o dado na memória.
  */
 typedef struct matrix_rn_t {
-  double*       data;  // bloco contíguo column-major, com nlins * ncols doubles
-  unsigned int  nlins; // numero de linhas
-  unsigned int  ncols; // numero de colunas
+  double* data;  // bloco contíguo column-major, com nlins * ncols doubles
+  size_t  nlins; // numero de linhas
+  size_t  ncols; // numero de colunas
 } Matrix;
 
-Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols);
-Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]);
-Matrix* matrix_create_identity(unsigned int m, unsigned int n);
+Matrix* matrix_create_empty(size_t nlins, size_t ncols);
+Matrix* matrix_create(size_t nlins, size_t ncols, Vector columns[]);
+Matrix* matrix_create_identity(size_t m, size_t n);
 
 /**
  * @brief matrix_copy(const Matrix*)
@@ -42,34 +44,35 @@ Matrix* matrix_copy(const Matrix* m);
 void matrix_destroy(Matrix* m);
 
 /**
- * @brief matrix_validate_index(Matrix*, const unsigned int, const unsigned int)
+ * @brief matrix_validate_index(Matrix*, const size_t, const size_t)
  * Valida se os indices passados estão nos limites do numero de linhas e colunas, respectivamente, da matriz.
  *
  * @return int
- * Retorna 0 se estão ok, -1 se indice de linha está fora da dimensão e 1 se indice de coluna está fora da dimensão.
+ * Retorna 0 se estão ok, -1 se indice de linha está fora da dimensão, 1 se
+ * indice de coluna está fora da dimensão e -2 se a matriz é nula.
  */
-int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned int j);
+int matrix_validate_index(const Matrix* m, const size_t i, const size_t j);
 Vector* matrix_get_line_vectors(const Matrix* a);
 
 /**
- * @brief matrix_get_vector_column_at(const Matrix*, unsigned int)
+ * @brief matrix_get_vector_column_at(const Matrix*, size_t)
  * Retorna uma CÓPIA da coluna de indice i de a como um novo Vector.
  *
  * O vetor devolvido deve ser liberado pelo chamador com vector_destroy.
  */
-Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i);
+Vector* matrix_get_vector_column_at(const Matrix* a, size_t i);
 
 /**
- * @brief matrix_set(Matrix*, const unsigned int, const unsigned int, double)
+ * @brief matrix_set(Matrix*, const size_t, const size_t, double)
  * Adiciona um valor na posicao i, j da matriz m
  *
  * @return Matrix* retorna a própria matriz para caso queira concatenar chamadas.
  */
-Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const double aij);
-double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j);
+Matrix* matrix_set(Matrix* m, const size_t i, const size_t j, const double aij);
+double matrix_get(const Matrix* m, const size_t i, const size_t j);
 
 /**
- * @brief matrix_add_column_vector_at(Matrix*, unsigned int, unsigned int, double*)
+ * @brief matrix_add_column_vector_at(Matrix*, size_t, size_t, double*)
  * Substitui o conteúdo da coluna de indice i pelos xlen valores de x.
  *
  * ATENÇÃO: diferente das versões anteriores da biblioteca, esta função
@@ -79,8 +82,8 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j);
  *
  * Requer xlen igual ao numero de linhas da matriz.
  */
-void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x);
-Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_index);
+void matrix_add_column_vector_at(Matrix* m, size_t i, size_t xlen, double* x);
+Matrix* matrix_remove_column_vector_at(const Matrix* m, size_t column_index);
 
 /**
  * Operações
@@ -134,10 +137,10 @@ double matrix_trace(const Matrix* m);
  * Calcula o posto da matriz a via decomposicao em valores singulares: o
  * numero de valores singulares acima de eps * max(m, n) * sigma_max.
  *
- * @return unsigned int o posto, ou (unsigned int)-1 com errno definido
+ * @return size_t o posto, ou SIZE_MAX com errno definido
  * (matriz nula ou sem linhas/colunas).
  */
-unsigned int matrix_rank(const Matrix* m);
+size_t matrix_rank(const Matrix* m);
 
 /**
  * Saída

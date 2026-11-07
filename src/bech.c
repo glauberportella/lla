@@ -35,7 +35,7 @@
 #define BENCH_MAX_DIM_COUNT 16
 #define BENCH_DEFAULT_DIM_COUNT 4
 
-static const unsigned int bench_default_dims[BENCH_DEFAULT_DIM_COUNT] = { 5, 10, 20, 50 };
+static const size_t bench_default_dims[BENCH_DEFAULT_DIM_COUNT] = { 5, 10, 20, 50 };
 
 /**
  * Tempo monotono em segundos.
@@ -81,16 +81,16 @@ static double bench_rng_double(void) {
 /**
  * Matriz quadrada n x n diagonalmente dominante, logo nao singular.
  */
-static Matrix* bench_random_matrix(unsigned int n) {
+static Matrix* bench_random_matrix(size_t n) {
   Matrix* m = matrix_create_empty(n, n);
   if (m == NULL) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     double soma = 0.0;
 
-    for (unsigned int j = 0; j < n; j++) {
+    for (size_t j = 0; j < n; j++) {
       if (i == j) {
         continue;
       }
@@ -125,7 +125,7 @@ static double bench_matrix_checksum(const Matrix* m) {
 }
 
 typedef double (*bench_op_fn)(const Matrix* a, const Matrix* b);
-typedef double (*bench_flops_fn)(unsigned int n);
+typedef double (*bench_flops_fn)(size_t n);
 
 typedef struct {
   const char* name;
@@ -215,19 +215,19 @@ static double bench_op_lu(const Matrix* a, const Matrix* b) {
   return acc;
 }
 
-static double bench_flops_mul(unsigned int n) {
+static double bench_flops_mul(size_t n) {
   return 2.0 * (double)n * (double)n * (double)n;
 }
 
-static double bench_flops_quadratic(unsigned int n) {
+static double bench_flops_quadratic(size_t n) {
   return (double)n * (double)n;
 }
 
-static double bench_flops_lu(unsigned int n) {
+static double bench_flops_lu(size_t n) {
   return (2.0 / 3.0) * (double)n * (double)n * (double)n;
 }
 
-static double bench_flops_inverse(unsigned int n) {
+static double bench_flops_inverse(size_t n) {
   const double n3 = (double)n * (double)n * (double)n;
   return (2.0 / 3.0 + 2.0) * n3;
 }
@@ -246,7 +246,7 @@ static const BenchOp bench_ops[] = {
 #define BENCH_OP_COUNT (sizeof(bench_ops) / sizeof(bench_ops[0]))
 
 typedef struct {
-  unsigned int iterations;
+  size_t iterations;
   double total_seconds;
   double ms_per_op;
   double ops_per_second;
@@ -258,7 +258,7 @@ typedef struct {
  * Estima quantas repeticoes sao necessarias para atingir o tempo alvo,
  * medindo antes uma unica execucao da operacao.
  */
-static unsigned int bench_calibrate(const BenchOp* op, const Matrix* a, const Matrix* b) {
+static size_t bench_calibrate(const BenchOp* op, const Matrix* a, const Matrix* b) {
   const double t0 = bench_now();
   const double warmup = op->run(a, b);
   const double t1 = bench_now();
@@ -280,14 +280,14 @@ static unsigned int bench_calibrate(const BenchOp* op, const Matrix* a, const Ma
     iterations = (double)BENCH_MAX_ITERATIONS;
   }
 
-  return (unsigned int)iterations;
+  return (size_t)iterations;
 }
 
 /**
  * Executa a operacao repetidamente e preenche a linha de resultado.
  */
 static int bench_run_op(const BenchOp* op, const Matrix* a, const Matrix* b, BenchRow* row) {
-  const unsigned int iterations = bench_calibrate(op, a, b);
+  const size_t iterations = bench_calibrate(op, a, b);
   if (iterations == 0) {
     return -1;
   }
@@ -295,7 +295,7 @@ static int bench_run_op(const BenchOp* op, const Matrix* a, const Matrix* b, Ben
   double checksum = 0.0;
 
   const double t0 = bench_now();
-  for (unsigned int i = 0; i < iterations; i++) {
+  for (size_t i = 0; i < iterations; i++) {
     const double valor = op->run(a, b);
     if (isnan(valor)) {
       return -1;
@@ -308,7 +308,7 @@ static int bench_run_op(const BenchOp* op, const Matrix* a, const Matrix* b, Ben
   row->total_seconds = t1 - t0;
   row->ms_per_op = (row->total_seconds * 1000.0) / (double)iterations;
   row->ops_per_second = (double)iterations / row->total_seconds;
-  row->mflops = (op->flops((unsigned int)a->nlins) * (double)iterations) / row->total_seconds / 1e6;
+  row->mflops = (op->flops((size_t)a->nlins) * (double)iterations) / row->total_seconds / 1e6;
   row->checksum = checksum;
 
   return 0;
@@ -321,14 +321,14 @@ static void bench_print_header(void) {
 }
 
 static void bench_print_row(const BenchOp* op, const BenchRow* row) {
-  printf("%-20s %12u %12.6f %14.6f %14.1f %10.3f\n",
+  printf("%-20s %12zu %12.6f %14.6f %14.1f %10.3f\n",
          op->name, row->iterations, row->total_seconds, row->ms_per_op,
          row->ops_per_second, row->mflops);
 }
 
 int main(int argc, char* argv[]) {
-  unsigned int dims[BENCH_MAX_DIM_COUNT];
-  unsigned int dim_count = 0;
+  size_t dims[BENCH_MAX_DIM_COUNT];
+  size_t dim_count = 0;
 
   if (argc > 1) {
     for (int i = 1; i < argc && dim_count < BENCH_MAX_DIM_COUNT; i++) {
@@ -343,10 +343,10 @@ int main(int argc, char* argv[]) {
         return 1;
       }
 
-      dims[dim_count++] = (unsigned int)valor;
+      dims[dim_count++] = (size_t)valor;
     }
   } else {
-    for (unsigned int i = 0; i < BENCH_DEFAULT_DIM_COUNT; i++) {
+    for (size_t i = 0; i < BENCH_DEFAULT_DIM_COUNT; i++) {
       dims[dim_count++] = bench_default_dims[i];
     }
   }
@@ -361,38 +361,38 @@ int main(int argc, char* argv[]) {
   printf("compilador: %s\n", __VERSION__);
 #endif
   printf("dimensoes: ");
-  for (unsigned int i = 0; i < dim_count; i++) {
-    printf("%u%s", dims[i], (i + 1 < dim_count) ? ", " : "\n");
+  for (size_t i = 0; i < dim_count; i++) {
+    printf("%zu%s", dims[i], (i + 1 < dim_count) ? ", " : "\n");
   }
   printf("tempo alvo por operacao: %.2f s\n", BENCH_TARGET_SECONDS);
   printf("os tempos incluem o custo de alocacao de memoria da biblioteca\n\n");
 
   BenchRow results[BENCH_MAX_DIM_COUNT][BENCH_OP_COUNT];
 
-  for (unsigned int d = 0; d < dim_count; d++) {
-    const unsigned int n = dims[d];
+  for (size_t d = 0; d < dim_count; d++) {
+    const size_t n = dims[d];
 
     bench_rng_seed(0x9E3779B97F4A7C15ULL + n);
 
     Matrix* a = bench_random_matrix(n);
     if (a == NULL) {
-      fprintf(stderr, "ERRO: falha ao criar a matriz %u x %u (errno = %d)\n", n, n, errno);
+      fprintf(stderr, "ERRO: falha ao criar a matriz %zu x %zu (errno = %d)\n", n, n, errno);
       return 1;
     }
 
     Matrix* b = bench_random_matrix(n);
     if (b == NULL) {
-      fprintf(stderr, "ERRO: falha ao criar a matriz %u x %u (errno = %d)\n", n, n, errno);
+      fprintf(stderr, "ERRO: falha ao criar a matriz %zu x %zu (errno = %d)\n", n, n, errno);
       matrix_destroy(a);
       return 1;
     }
 
-    printf(">>> n = %u\n", n);
+    printf(">>> n = %zu\n", n);
     bench_print_header();
 
     for (size_t o = 0; o < BENCH_OP_COUNT; o++) {
       if (bench_run_op(&bench_ops[o], a, b, &results[d][o]) != 0) {
-        fprintf(stderr, "ERRO: falha em %s para n = %u (errno = %d)\n", bench_ops[o].name, n, errno);
+        fprintf(stderr, "ERRO: falha em %s para n = %zu (errno = %d)\n", bench_ops[o].name, n, errno);
         matrix_destroy(b);
         matrix_destroy(a);
         return 1;
@@ -408,15 +408,15 @@ int main(int argc, char* argv[]) {
 
   printf("=== Escala: ms por operacao ===\n");
   printf("%-20s", "operacao");
-  for (unsigned int d = 0; d < dim_count; d++) {
-    printf(" %12u", dims[d]);
+  for (size_t d = 0; d < dim_count; d++) {
+    printf(" %12zu", dims[d]);
   }
   printf("\n");
   printf("---------------------------------------------------------------------------------------------------\n");
 
   for (size_t o = 0; o < BENCH_OP_COUNT; o++) {
     printf("%-20s", bench_ops[o].name);
-    for (unsigned int d = 0; d < dim_count; d++) {
+    for (size_t d = 0; d < dim_count; d++) {
       printf(" %12.6f", results[d][o].ms_per_op);
     }
     printf("\n");
@@ -425,7 +425,7 @@ int main(int argc, char* argv[]) {
   printf("\n=== Checksums (verificacao de consistencia) ===\n");
   for (size_t o = 0; o < BENCH_OP_COUNT; o++) {
     printf("%-20s", bench_ops[o].name);
-    for (unsigned int d = 0; d < dim_count; d++) {
+    for (size_t d = 0; d < dim_count; d++) {
       printf(" %18.6e", results[d][o].checksum);
     }
     printf("\n");

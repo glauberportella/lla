@@ -16,9 +16,9 @@ static Vector* lsystem_forward_substitution(const Matrix* l, const Vector* pb) {
     return NULL;
   }
 
-  for (unsigned int i = 0; i < pb->dim; i++) {
+  for (size_t i = 0; i < pb->dim; i++) {
     double s = 0.0;
-    for (unsigned int j = 0; j < i; j++) {
+    for (size_t j = 0; j < i; j++) {
       s += matrix_get(l, i, j) * y->x[j];
     }
     vector_set(y, i, pb->x[i] - s);
@@ -36,11 +36,11 @@ static Vector* lsystem_back_substitution(const Matrix* u, const Vector* y) {
     return NULL;
   }
 
-  for (unsigned int i = y->dim; i > 0; i--) {
-    const unsigned int ii = i - 1;
+  for (size_t i = y->dim; i > 0; i--) {
+    const size_t ii = i - 1;
 
     double s = 0.0;
-    for (unsigned int j = ii + 1; j < y->dim; j++) {
+    for (size_t j = ii + 1; j < y->dim; j++) {
       s += matrix_get(u, ii, j) * x->x[j];
     }
 
@@ -103,13 +103,13 @@ static Vector* lsystem_solve_svd(const Matrix* a, const Vector* b) {
     return NULL;
   }
 
-  const unsigned int k = r->sigma->dim; // min(m, n)
-  const unsigned int nc = a->ncols;     // dimensao da solucao
+  const size_t k = r->sigma->dim; // min(m, n)
+  const size_t nc = a->ncols;     // dimensao da solucao
 
   double utb[k];
-  for (unsigned int j = 0; j < k; j++) {
+  for (size_t j = 0; j < k; j++) {
     double s = 0.0;
-    for (unsigned int i = 0; i < b->dim; i++) {
+    for (size_t i = 0; i < b->dim; i++) {
       s += matrix_get(r->U, i, j) * b->x[i];
     }
     utb[j] = s;
@@ -124,12 +124,12 @@ static Vector* lsystem_solve_svd(const Matrix* a, const Vector* b) {
     return NULL;
   }
 
-  for (unsigned int j = 0; j < k; j++) {
+  for (size_t j = 0; j < k; j++) {
     if (r->sigma->x[j] <= tol) {
       continue;
     }
     const double w = utb[j] / r->sigma->x[j];
-    for (unsigned int i = 0; i < nc; i++) {
+    for (size_t i = 0; i < nc; i++) {
       x->x[i] += matrix_get(r->VT, j, i) * w;
     }
   }

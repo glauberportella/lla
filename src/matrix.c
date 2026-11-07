@@ -25,10 +25,10 @@
  */
 
 static size_t matrix_data_size(const Matrix* m) {
-  return (size_t)m->nlins * (size_t)m->ncols;
+  return m->nlins * m->ncols;
 }
 
-Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
+Matrix* matrix_create_empty(size_t nlins, size_t ncols) {
   if (nlins == 0 || ncols == 0) {
     errno = EMATRIXALLOCATION;
     return NULL;
@@ -53,7 +53,7 @@ Matrix* matrix_create_empty(unsigned int nlins, unsigned int ncols) {
   return m;
 }
 
-Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) {
+Matrix* matrix_create(size_t nlins, size_t ncols, Vector columns[]) {
   if (nlins == 0 || ncols == 0 || columns == NULL) {
     errno = EMATRIXALLOCATION;
     return NULL;
@@ -75,7 +75,7 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
     return NULL;
   }
 
-  for (unsigned int j = 0; j < ncols; j++) {
+  for (size_t j = 0; j < ncols; j++) {
     if (columns[j].dim != nlins || columns[j].x == NULL) {
       free(m->data);
       free(m);
@@ -89,15 +89,15 @@ Matrix* matrix_create(unsigned int nlins, unsigned int ncols, Vector columns[]) 
   return m;
 }
 
-Matrix* matrix_create_identity(unsigned int m, unsigned int n) {
+Matrix* matrix_create_identity(size_t m, size_t n) {
   Matrix* a = matrix_create_empty(m, n);
   if (a == NULL) {
     errno = EMATRIXALLOCATION;
     return NULL;
   }
 
-  const unsigned int diag = (m < n) ? m : n;
-  for (unsigned int i = 0; i < diag; i++) {
+  const size_t diag = (m < n) ? m : n;
+  for (size_t i = 0; i < diag; i++) {
     a->data[(size_t)i * n + i] = 1.0;
   }
 
@@ -128,7 +128,7 @@ void matrix_destroy(Matrix* m) {
   }
 }
 
-int matrix_validate_index(const Matrix* m, const unsigned int i, const unsigned int j) {
+int matrix_validate_index(const Matrix* m, const size_t i, const size_t j) {
   if (m == NULL) {
     errno = EMATRIXNULL;
     return -2;
@@ -159,12 +159,12 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
     return NULL;
   }
 
-  for (unsigned int j = 0; j < a->nlins; j++) {
+  for (size_t j = 0; j < a->nlins; j++) {
     line_vectors[j].dim = a->ncols;
     line_vectors[j].x = (double*)calloc(a->ncols, sizeof(double));
 
     if (line_vectors[j].x == NULL) {
-      for (unsigned int k = 0; k < j; k++) {
+      for (size_t k = 0; k < j; k++) {
         free(line_vectors[k].x);
       }
 
@@ -173,7 +173,7 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
       return NULL;
     }
 
-    for (unsigned int i = 0; i < a->ncols; i++) {
+    for (size_t i = 0; i < a->ncols; i++) {
       line_vectors[j].x[i] = a->data[(size_t)i * a->nlins + j];
     }
   }
@@ -181,7 +181,7 @@ Vector* matrix_get_line_vectors(const Matrix* a) {
   return line_vectors;
 }
 
-Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i) {
+Vector* matrix_get_vector_column_at(const Matrix* a, size_t i) {
   if (a == NULL) {
     errno = EMATRIXNULL;
     return NULL;
@@ -195,7 +195,7 @@ Vector* matrix_get_vector_column_at(const Matrix* a, unsigned int i) {
   return vector_create(a->nlins, a->data + (size_t)i * a->nlins);
 }
 
-Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const double aij) {
+Matrix* matrix_set(Matrix* m, const size_t i, const size_t j, const double aij) {
   if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return NULL;
@@ -211,7 +211,7 @@ Matrix* matrix_set(Matrix* m, const unsigned int i, const unsigned int j, const 
   return m;
 }
 
-double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
+double matrix_get(const Matrix* m, const size_t i, const size_t j) {
   if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return NAN;
@@ -225,13 +225,13 @@ double matrix_get(const Matrix* m, const unsigned int i, const unsigned int j) {
   return m->data[(size_t)j * m->nlins + i];
 }
 
-Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_index) {
+Matrix* matrix_remove_column_vector_at(const Matrix* m, size_t column_index) {
   if (m == NULL) {
     errno = EMATRIXNULL;
     return NULL;
   }
 
-  if (column_index > m->ncols - 1) {
+  if (column_index >= m->ncols) {
     errno = EMATRIXINVALIDCOLINDEX;
     return NULL;
   }
@@ -244,7 +244,7 @@ Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_inde
 
   const size_t col_bytes = m->nlins * sizeof(double);
   double* dest = n->data;
-  for (unsigned int i = 0; i < m->ncols; i++) {
+  for (size_t i = 0; i < m->ncols; i++) {
     if (i == column_index) {
       continue;
     }
@@ -261,7 +261,7 @@ Matrix* matrix_remove_column_vector_at(const Matrix* m, unsigned int column_inde
  * Os valores sao COPIADOS para dentro do bloco da matriz; o chamador
  * continua responsavel por liberar x.
  */
-void matrix_add_column_vector_at(Matrix* m, unsigned int i, unsigned int xlen, double* x) {
+void matrix_add_column_vector_at(Matrix* m, size_t i, size_t xlen, double* x) {
   if (m == NULL || m->data == NULL) {
     errno = EMATRIXNULL;
     return;
@@ -372,9 +372,9 @@ Matrix* matrix_mul(const Matrix* a, const Matrix* b) {
     return NULL;
   }
 
-  const unsigned int M = a->nlins; // linhas de A e de C
-  const unsigned int K = a->ncols; // colunas de A == linhas de B
-  const unsigned int N = b->ncols; // colunas de B e de C
+  const size_t M = a->nlins; // linhas de A e de C
+  const size_t K = a->ncols; // colunas de A == linhas de B
+  const size_t N = b->ncols; // colunas de B e de C
 
   const double* restrict pa = a->data;
   const double* restrict pb = b->data;
@@ -383,16 +383,16 @@ Matrix* matrix_mul(const Matrix* a, const Matrix* b) {
 #ifdef LLA_OPENMP
 #pragma omp parallel for
 #endif
-  for (unsigned int j = 0; j < N; j++) {
+  for (size_t j = 0; j < N; j++) {
     double* restrict cj = pc + (size_t)j * M;
     const double* restrict bj = pb + (size_t)j * K; // coluna j de B, contígua
-    for (unsigned int i = 0; i < M; i++) {
+    for (size_t i = 0; i < M; i++) {
       cj[i] = 0.0;
     }
-    for (unsigned int k = 0; k < K; k++) {
+    for (size_t k = 0; k < K; k++) {
       const double bkj = bj[k];
       const double* restrict ak = pa + (size_t)k * M;
-      for (unsigned int i = 0; i < M; i++) {
+      for (size_t i = 0; i < M; i++) {
         cj[i] += ak[i] * bkj;
       }
     }
@@ -442,16 +442,16 @@ Vector* matrix_mul_vector(const Matrix* m, const Vector* v) {
   }
 
   // r = soma_j v[j] * col_j, com cada coluna lida de forma contígua.
-  const unsigned int nr = m->nlins;
+  const size_t nr = m->nlins;
   double* restrict pr = r->x;
 
-  for (unsigned int j = 0; j < m->ncols; j++) {
+  for (size_t j = 0; j < m->ncols; j++) {
     const double coef = v->x[j];
     if (coef == 0.0) {
       continue;
     }
     const double* restrict col = m->data + (size_t)j * nr;
-    for (unsigned int i = 0; i < nr; i++) {
+    for (size_t i = 0; i < nr; i++) {
       pr[i] += coef * col[i];
     }
   }
@@ -472,14 +472,14 @@ Matrix* matrix_transpose(const Matrix* m) {
   }
 
   // t(j, i) = m(i, j): lê colunas de m (contíguo) e escreve as linhas de t.
-  const unsigned int nr = m->nlins;
-  const unsigned int nc = m->ncols;
+  const size_t nr = m->nlins;
+  const size_t nc = m->ncols;
   const double* restrict pm = m->data;
   double* restrict pt = t->data;
 
-  for (unsigned int i = 0; i < nc; i++) {
+  for (size_t i = 0; i < nc; i++) {
     const double* restrict col = pm + (size_t)i * nr;
-    for (unsigned int j = 0; j < nr; j++) {
+    for (size_t j = 0; j < nr; j++) {
       pt[(size_t)j * nc + i] = col[j];
     }
   }
@@ -492,14 +492,14 @@ Matrix* matrix_transpose(const Matrix* m) {
  * inferior de diagonal unitária, atualizando o vetor y (saxpy por colunas,
  * com as colunas de L lidas de forma contígua).
  */
-static void matrix_lu_forward_update(double* restrict y, const Matrix* restrict l, unsigned int n) {
-  for (unsigned int j = 0; j < n; j++) {
+static void matrix_lu_forward_update(double* restrict y, const Matrix* restrict l, size_t n) {
+  for (size_t j = 0; j < n; j++) {
     const double yj = y[j];
     if (yj == 0.0) {
       continue;
     }
     const double* restrict col = l->data + (size_t)j * n;
-    for (unsigned int i = j + 1; i < n; i++) {
+    for (size_t i = j + 1; i < n; i++) {
       y[i] -= col[i] * yj;
     }
   }
@@ -510,10 +510,9 @@ static void matrix_lu_forward_update(double* restrict y, const Matrix* restrict 
  * usando a forma por colunas (x[j] = y[j] / u_jj seguida da correção de
  * y[i], i < j, com a coluna j de U lida de forma contígua).
  */
-static int matrix_lu_back_solve(double* restrict x, double* restrict y, const Matrix* restrict u, unsigned int n) {
-  for (int jj = (int)n - 1; jj >= 0; jj--) {
-    const unsigned int j = (unsigned int)jj;
-    const double pivot = u->data[(size_t)j * n + j];
+static int matrix_lu_back_solve(double* restrict x, double* restrict y, const Matrix* restrict u, size_t n) {
+  for (size_t j = n; j-- > 0;) {
+    const double pivot = u->data[j * n + j];
 
     if (fabs(pivot) < 1e-9) {
       errno = EMATRIXSINGULAR;
@@ -527,8 +526,8 @@ static int matrix_lu_back_solve(double* restrict x, double* restrict y, const Ma
       continue;
     }
 
-    const double* restrict col = u->data + (size_t)j * n;
-    for (unsigned int i = 0; i < j; i++) {
+    const double* restrict col = u->data + j * n;
+    for (size_t i = 0; i < j; i++) {
       y[i] -= col[i] * xj;
     }
   }
@@ -574,7 +573,7 @@ Matrix* matrix_inverse(const Matrix* m) {
     return NULL;
   }
 
-  unsigned int n = m->nlins;
+  size_t n = m->nlins;
 
   // A inversa a ser retornada
   Matrix* inv = matrix_create_empty(n, n);
@@ -594,13 +593,13 @@ Matrix* matrix_inverse(const Matrix* m) {
 
   const Matrix* l = lu->l;
   const Matrix* u = lu->u;
-  const int* restrict piv = lu->piv;
+  const size_t* restrict piv = lu->piv;
   int failed = 0;
 
-  for (unsigned int i = 0; i < n && !failed; i++) {
+  for (size_t i = 0; i < n && !failed; i++) {
     // b = P * e_i: 1 na linha cujo pivô aponta para a coluna i
-    for (unsigned int k = 0; k < n; k++) {
-      y[k] = (piv[k] == (int)i) ? 1.0 : 0.0;
+    for (size_t k = 0; k < n; k++) {
+      y[k] = (piv[k] == i) ? 1.0 : 0.0;
     }
 
     // L * y = b, com L de diagonal unitária (só as atualizações)
@@ -629,11 +628,11 @@ Matrix* matrix_inverse(const Matrix* m) {
  *
  * Retorna 1 para permutacao par e -1 para permutacao impar.
  */
-static int matrix_permutation_sign(const int* restrict piv, const unsigned int n) {
+static int matrix_permutation_sign(const size_t* restrict piv, const size_t n) {
   // O sinal da permutacao e (-1) elevado ao numero de inversoes
-  unsigned long inversions = 0;
-  for (unsigned int i = 0; i < n; i++) {
-    for (unsigned int j = i + 1; j < n; j++) {
+  size_t inversions = 0;
+  for (size_t i = 0; i < n; i++) {
+    for (size_t j = i + 1; j < n; j++) {
       if (piv[i] > piv[j]) {
         inversions++;
       }
@@ -666,7 +665,7 @@ double matrix_determinant(const Matrix* m) {
     return NAN;
   }
 
-  const unsigned int n = m->nlins;
+  const size_t n = m->nlins;
 
   /*
    * Como P * A = L * U, temos A = P^-1 * L * U e portanto
@@ -675,7 +674,7 @@ double matrix_determinant(const Matrix* m) {
    */
   double product = 1.0;
   const double* restrict du = lu->u->data;
-  for (unsigned int i = 0; i < n; i++) {
+  for (size_t i = 0; i < n; i++) {
     product *= du[(size_t)i * n + i];
   }
 
@@ -698,34 +697,34 @@ double matrix_trace(const Matrix* m) {
   }
 
   double trace = 0.0;
-  for (unsigned int i = 0; i < m->nlins; i++) {
+  for (size_t i = 0; i < m->nlins; i++) {
     trace += m->data[(size_t)i * m->nlins + i];
   }
 
   return trace;
 }
 
-unsigned int matrix_rank(const Matrix* m) {
+size_t matrix_rank(const Matrix* m) {
   if (m == NULL) {
     errno = EMATRIXNULL;
-    return (unsigned int)-1;
+    return SIZE_MAX;
   }
 
   if (m->nlins == 0 || m->ncols == 0) {
     errno = EMATRIXINVALIDDIM;
-    return (unsigned int)-1;
+    return SIZE_MAX;
   }
 
   SVDResult* r = svd_golub_reinsch(m);
   if (r == NULL) {
-    return (unsigned int)-1;
+    return SIZE_MAX;
   }
 
   const double tol = (double)(m->nlins > m->ncols ? m->nlins : m->ncols)
                      * r->sigma->x[0] * DBL_EPSILON;
 
-  unsigned int rank = 0;
-  for (unsigned int j = 0; j < r->sigma->dim; j++) {
+  size_t rank = 0;
+  for (size_t j = 0; j < r->sigma->dim; j++) {
     if (r->sigma->x[j] > tol) {
       rank++;
     }
@@ -742,23 +741,23 @@ void matrix_print(const Matrix* m, const char* matrix_label) {
     return;
   }
 
-  unsigned int label_size = 0;
+  size_t label_size = 0;
 
   if (matrix_label != NULL) {
     label_size = strlen(matrix_label) + 3;
     printf("%s = ", matrix_label);
   }
 
-  for (unsigned int i = 0; i < m->nlins; i++) {
+  for (size_t i = 0; i < m->nlins; i++) {
     if (i > 0 && label_size > 0) {
-      for (unsigned int j = 0; j < label_size; j++) {
+      for (size_t j = 0; j < label_size; j++) {
         printf(" ");
       }
     }
 
     printf("| ");
 
-    for (unsigned int j = 0; j < m->ncols; j++) {
+    for (size_t j = 0; j < m->ncols; j++) {
       printf("%.2f ", m->data[(size_t)j * m->nlins + i]);
     }
 
